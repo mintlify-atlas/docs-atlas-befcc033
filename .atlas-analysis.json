@@ -1,0 +1,106 @@
+{
+  "projectType": "cli-tool",
+  "projectName": "Max",
+  "projectDescription": "A personal AI daemon built on the GitHub Copilot SDK that runs persistently on your machine, orchestrating multiple Copilot sessions controllable via Telegram or a local terminal UI.",
+  "theme": "palm",
+  "primaryColor": "#848c8e",
+  "lightColor": "#11161e",
+  "darkColor": "#cfd0d2",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Commands",
+            "pages": [
+              "commands/overview",
+              "commands/start",
+              "commands/tui",
+              "commands/setup",
+              "commands/update"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment",
+              "configuration/telegram",
+              "configuration/models",
+              "configuration/mcp-servers"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/orchestrator",
+              "concepts/workers",
+              "concepts/memory",
+              "concepts/skills"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/telegram-setup",
+              "guides/google-services",
+              "guides/custom-skills",
+              "guides/model-routing"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/api",
+              "reference/tui-commands",
+              "reference/troubleshooting"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Always-on Copilot orchestrator session that persists across restarts",
+    "Multi-interface support: Telegram (remote) and TUI (local terminal)",
+    "Worker sessions: spawns child Copilot CLI sessions for specific coding tasks",
+    "Skill system: install documentation-based integrations for external tools",
+    "Long-term memory: stores preferences, facts, projects, and routines in SQLite",
+    "Intelligent model routing: classifies tasks and selects appropriate models",
+    "HTTP API (port 7777) for programmatic access with bearer token auth",
+    "MCP server support via Copilot CLI configuration",
+    "Max 5 concurrent worker sessions with protected directory restrictions"
+  ],
+  "publicApiSurface": [
+    "max start [--self-edit]",
+    "max tui",
+    "max setup",
+    "max update",
+    "max help",
+    "POST /send",
+    "GET /events (SSE)",
+    "GET /workers",
+    "GET /status",
+    "GET /memories",
+    "POST /memories",
+    "GET /skills",
+    "DELETE /skills/{slug}",
+    "POST /restart",
+    "create_worker_session(name, working_dir, initial_prompt)",
+    "send_to_worker(name, prompt)",
+    "learn_skill(slug, name, description, instructions)",
+    "uninstall_skill(slug)",
+    "save_memory(category, content)",
+    "recall_memory(keyword, category)",
+    "forget_memory(id)"
+  ]
+}
