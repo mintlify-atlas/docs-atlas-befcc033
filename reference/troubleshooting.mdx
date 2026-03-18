@@ -1,0 +1,230 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for Max, the personal AI daemon.
+---
+
+This page covers common problems encountered when running Max and how to resolve them.
+
+## Common issues
+
+<AccordionGroup>
+
+  <Accordion title="Copilot CLI not found">
+    Max requires the GitHub Copilot CLI to be installed and available on your `PATH`.
+
+    **Install it with npm:**
+
+    ```bash
+    npm install -g @github/copilot
+    ```
+
+    After installing, verify it is accessible:
+
+    ```bash
+    copilot --version
+    ```
+
+    Then restart Max:
+
+    ```bash
+    max start
+    ```
+  </Accordion>
+
+  <Accordion title="Not authenticated with Copilot CLI">
+    Max uses the Copilot CLI to communicate with AI models. If the CLI is not authenticated, sessions will fail to start.
+
+    **Authenticate:**
+
+    ```bash
+    copilot login
+    ```
+
+    Follow the prompts to complete the browser-based OAuth flow. Once authenticated, restart Max.
+  </Accordion>
+
+  <Accordion title="Telegram bot not responding">
+    If messages sent to your Telegram bot receive no reply, check the following:
+
+    1. **Bot token** — verify `TELEGRAM_BOT_TOKEN` in `~/.max/.env` is correct. You can get a new token from [@BotFather](https://t.me/BotFather).
+
+    2. **Authorized user ID** — verify `AUTHORIZED_USER_ID` in `~/.max/.env` matches your numeric Telegram user ID. Get your ID from [@userinfobot](https://t.me/userinfobot).
+
+    3. **Re-run setup** — if either value is missing or wrong, run:
+
+    ```bash
+    max setup
+    ```
+
+    4. **Check logs** — Max logs to stdout/stderr. If you ran `max start` in a terminal, scroll up to see any Telegram-related errors.
+  </Accordion>
+
+  <Accordion title="Model unavailable or not found">
+    If Max reports that a model is unavailable, or `/model <name>` returns an error, the model may not be accessible with your Copilot subscription or the name may be incorrect.
+
+    **List available models:**
+
+    ```bash
+    copilot listModels
+    ```
+
+    Use one of the returned model IDs with `/model` or set it in `~/.max/.env`:
+
+    ```env
+    COPILOT_MODEL=claude-sonnet-4.6
+    ```
+  </Accordion>
+
+  <Accordion title="Skills not loading">
+    If Max does not appear to be using an installed skill, verify the skill directory structure is correct.
+
+    Each skill must be a directory containing at minimum a `SKILL.md` file:
+
+    ```
+    ~/.max/skills/
+    └── my-skill/
+        ├── SKILL.md
+        └── _meta.json
+    ```
+
+    Skills are also loaded from `~/.agents/skills/` (shared global skills). Check both locations.
+
+    **List installed skills from the TUI:**
+
+    ```
+    /skills
+    ```
+
+    Skills are injected into the orchestrator session at startup. After installing a skill, restart Max for it to take effect:
+
+    ```bash
+    max start
+    ```
+  </Accordion>
+
+  <Accordion title="Workers are stuck or not completing">
+    Worker sessions have a configurable timeout. If a worker runs longer than `WORKER_TIMEOUT` milliseconds, it may be stuck.
+
+    **Check and adjust the timeout** in `~/.max/.env`:
+
+    ```env
+    WORKER_TIMEOUT=600000
+    ```
+
+    The default is 600,000 ms (10 minutes). Increase this for long-running tasks.
+
+    You can also ask Max to kill a stuck session directly:
+
+    ```
+    Kill the auth-fix session
+    ```
+
+    Or restart the daemon to clear all workers:
+
+    ```bash
+    max start
+    ```
+  </Accordion>
+
+  <Accordion title="Daemon crashed or stopped unexpectedly">
+    If the daemon exits, restart it:
+
+    ```bash
+    max start
+    ```
+
+    Max saves the orchestrator session ID to `~/.max/max.db` and resumes it automatically on the next start. Recent conversation context is injected back into the session so Max can pick up where it left off.
+
+    If the daemon crashes repeatedly, check the terminal output for error messages. Max logs unhandled errors to stderr before exiting.
+  </Accordion>
+
+  <Accordion title="TUI cannot connect to the daemon">
+    The TUI connects to the daemon at `http://127.0.0.1:7777`. If you see:
+
+    ```
+    ✗ cannot connect to daemon
+      start with: max start
+    ```
+
+    Make sure the daemon is running:
+
+    ```bash
+    max start
+    ```
+
+    Run the daemon in one terminal and the TUI in a separate terminal. The TUI retries automatically and will reconnect once the daemon is available.
+
+    If you configured a custom `API_PORT`, set `MAX_API_URL` when starting the TUI:
+
+    ```bash
+    MAX_API_URL=http://127.0.0.1:8888 max tui
+    ```
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    If you see an error like `Port 7777 is already in use`, either another Max instance is already running, or another process has claimed the port.
+
+    **To use a different port**, update `~/.max/.env`:
+
+    ```env
+    API_PORT=7778
+    ```
+
+    Then restart Max:
+
+    ```bash
+    max start
+    ```
+
+    If you are running the TUI against the new port, set `MAX_API_URL`:
+
+    ```bash
+    MAX_API_URL=http://127.0.0.1:7778 max tui
+    ```
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Logs
+
+Max writes all output to stdout and stderr. To capture logs to a file:
+
+```bash
+max start 2>&1 | tee ~/.max/daemon.log
+```
+
+For detailed TUI lifecycle logs (SSE events, stream chunks, input handling), set `MAX_TUI_DEBUG=1`:
+
+```bash
+MAX_TUI_DEBUG=1 max tui
+```
+
+Logs are written to `~/.max/tui-debug.log` as newline-delimited JSON.
+
+---
+
+## Configuration reference
+
+All configuration lives in `~/.max/.env`. The most relevant settings for troubleshooting:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `API_PORT` | `7777` | Port for the local HTTP API |
+| `COPILOT_MODEL` | `claude-sonnet-4.6` | Default model for the orchestrator |
+| `WORKER_TIMEOUT` | `600000` | Worker session timeout in milliseconds |
+| `TELEGRAM_BOT_TOKEN` | — | Telegram bot token (optional) |
+| `AUTHORIZED_USER_ID` | — | Telegram user ID to authorize (optional) |
+
+After editing `~/.max/.env`, restart Max for changes to take effect.
+
+---
+
+## Getting help
+
+If you encounter an issue not covered here, open a GitHub issue:
+
+[https://github.com/burkeholland/max/issues](https://github.com/burkeholland/max/issues)
+
+Include the output of `max start` and any relevant error messages.

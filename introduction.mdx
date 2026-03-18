@@ -1,0 +1,89 @@
+---
+title: "Introduction"
+description: "Max is a personal AI daemon built on the GitHub Copilot SDK — always-on, always available, controllable via Telegram or your terminal."
+---
+
+Max is a **personal AI daemon** for developers. It runs persistently on your machine, powered by the [GitHub Copilot SDK](https://github.com/github/copilot-sdk), and acts as an always-on orchestrator that you can reach from anywhere.
+
+Send a message from your phone via Telegram, or open a terminal and type. Max handles the rest — spinning up coding sessions in the right directories, remembering your preferences, and reporting back when work is done.
+
+## How it works
+
+Max starts a persistent **orchestrator** Copilot session that runs as a background daemon on your machine. When you send a message, the orchestrator decides how to handle it:
+
+- **Simple questions** — answered directly by the orchestrator.
+- **Coding tasks** — the orchestrator spawns a **worker** Copilot session in the relevant directory, runs the task in the background, and notifies you when it's done.
+- **Tool use** — skills, memory recall, and session management are all handled through the orchestrator's tool set.
+
+You can reach the daemon from two interfaces:
+
+- **Telegram** — send messages from your phone; useful for dispatching tasks while away from your desk.
+- **TUI** — a local terminal client (`max tui`) that connects to the running daemon.
+
+```
+Telegram ──→ Max Daemon ←── TUI
+                │
+          Orchestrator Session (Copilot SDK)
+                │
+      ┌─────────┼─────────┐
+   Worker 1  Worker 2  Worker N
+```
+
+## Who it's for
+
+Max is built for developers who want an **always-on AI assistant** that:
+
+- Runs entirely on their own machine (no cloud sync, no data leaving except via Copilot SDK's normal API calls)
+- Can manage multiple background coding tasks simultaneously
+- Is reachable from anywhere — phone or terminal
+- Learns new capabilities over time through a skill system
+- Remembers preferences, projects, and context across sessions
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Persistent orchestrator" icon="brain">
+    One long-running Copilot session that survives restarts and recovers context automatically.
+  </Card>
+  <Card title="Multi-interface" icon="mobile">
+    Control Max from Telegram (remote) or the TUI (local terminal) — same brain, different inputs.
+  </Card>
+  <Card title="Worker sessions" icon="code-branch">
+    Max spawns child Copilot sessions in specific directories for focused coding tasks, up to 5 concurrently.
+  </Card>
+  <Card title="Skill system" icon="graduation-cap">
+    Install documentation-based skills to teach Max how to use external tools like Gmail, Calendar, or smart home APIs.
+  </Card>
+  <Card title="Long-term memory" icon="database">
+    Max remembers your preferences, projects, and routines in a local SQLite database at `~/.max/`.
+  </Card>
+  <Card title="Smart model routing" icon="route">
+    Max automatically selects the right model tier based on task complexity, with keyword overrides.
+  </Card>
+  <Card title="HTTP API" icon="plug">
+    A local REST API on port 7777 lets you integrate Max into your own tools and scripts.
+  </Card>
+  <Card title="MCP server support" icon="server">
+    Load MCP servers from your Copilot CLI config (`~/.copilot/mcp-config.json`) to extend Max's capabilities.
+  </Card>
+</CardGroup>
+
+## Everything stays local
+
+All configuration, memory, conversation history, and skills are stored in `~/.max/` on your machine:
+
+| Path | Contents |
+|------|----------|
+| `~/.max/.env` | Config: tokens, model, API port |
+| `~/.max/max.db` | SQLite: sessions, conversation log, memories |
+| `~/.max/skills/` | Installed skills |
+| `~/.max/api-token` | Bearer token for the local HTTP API |
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Max with a single curl command or npm.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get Max running and send your first message in minutes.
+  </Card>
+</CardGroup>

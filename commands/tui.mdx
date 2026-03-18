@@ -1,0 +1,115 @@
+---
+title: max tui
+description: Open the terminal UI — a readline-based client that connects to the Max daemon over Server-Sent Events.
+---
+
+`max tui` opens an interactive terminal interface for chatting with Max. It connects to the running daemon at `http://127.0.0.1:7777` via SSE (Server-Sent Events) and streams responses in real time with markdown rendering.
+
+```bash
+max tui
+```
+
+<Note>
+The daemon must be running before you open the TUI. Start it in a separate terminal with `max start`.
+</Note>
+
+## How it works
+
+The TUI establishes a persistent SSE connection to the daemon's `/stream` endpoint. When you type a message and press Enter:
+
+1. The message is POSTed to `/message` on the daemon.
+2. The daemon enqueues it to the orchestrator.
+3. Response tokens stream back over the SSE connection and are rendered inline.
+
+Proactive messages (e.g. worker completions triggered by background tasks) arrive over the same SSE stream and are printed with a `MAX` label whenever the TUI is open.
+
+## Connection
+
+By default the TUI connects to `http://127.0.0.1:7777`. Override this with:
+
+```bash
+MAX_API_URL=http://remote-host:7777 max tui
+```
+
+Authentication uses a Bearer token read from `~/.max/api-token` and sent as an `Authorization` header on every request.
+
+If the daemon is not reachable, the TUI retries every 5 seconds:
+
+```text
+    ✗ cannot connect to daemon
+      start with: max start
+```
+
+Once connected it prints:
+
+```text
+  ● max — connected
+```
+
+## Slash commands
+
+Type a slash command at the prompt to control the daemon or the TUI itself.
+
+| Command | Description |
+|---------|-------------|
+| `/model [name]` | Show the current model, or switch to a named model |
+| `/auto` | Toggle automatic model routing on or off |
+| `/memory` | List all stored memories |
+| `/skills` | List installed skills; enter a number to uninstall a local skill |
+| `/workers` | List active worker sessions with their status and working directory |
+| `/copy` | Copy the last response to the system clipboard |
+| `/status` | Print the daemon's health check JSON |
+| `/restart` | Restart the daemon process in place |
+| `/clear` | Clear the terminal screen |
+| `/help` | Print the command reference inside the TUI |
+| `/cancel` | Cancel the current in-flight request |
+| `/quit` or `/exit` | Exit the TUI |
+
+### Switching models
+
+```text
+/model
+  model: claude-sonnet-4.6
+
+/model gpt-4.1
+  model: claude-sonnet-4.6 → gpt-4.1
+```
+
+## Keyboard shortcuts
+
+| Key | Action |
+|-----|--------|
+| **Escape** | Cancel the currently running response |
+| **Up / Down** | Navigate input history |
+| **Ctrl+C** | Exit the TUI |
+
+<Tip>
+Escape sends a `/cancel` request to the daemon and stops both streaming and the thinking indicator without exiting the TUI.
+</Tip>
+
+## Real-time streaming
+
+Responses stream token-by-token as they arrive. The TUI renders markdown to ANSI escape codes in real time:
+
+- Headings (`#`, `##`, `###`) are styled with bold/colour.
+- Bullet and numbered lists are formatted with indent markers.
+- Code blocks are surrounded by a dim `│` border.
+- Inline `code`, **bold**, and ~~strikethrough~~ are rendered with ANSI formatting.
+
+A `Thinking...` spinner is shown while the daemon processes the request before the first token arrives.
+
+## History persistence
+
+Every message you send (non-command lines) is appended to `~/.max/tui_history`. The history file is capped at **1,000 entries** and trimmed automatically on exit.
+
+History is loaded into readline on startup so **Up/Down** navigation works across sessions.
+
+## Debug logging
+
+Set `MAX_TUI_DEBUG=1` to write a structured event log to `~/.max/tui-debug.log`:
+
+```bash
+MAX_TUI_DEBUG=1 max tui
+```
+
+The log captures SSE lifecycle events, stream chunk details, and input rendering events as newline-delimited JSON.

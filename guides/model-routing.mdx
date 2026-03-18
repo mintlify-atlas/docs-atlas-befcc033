@@ -1,0 +1,184 @@
+---
+title: Model routing
+description: How Max automatically selects the right model for each task, and how to configure or override it.
+---
+
+Model routing lets Max automatically choose the most appropriate model for each message based on task complexity. Simple questions go to a fast, lightweight model. Complex design or architecture work goes to a more capable premium model. You pay for premium compute only when you actually need it.
+
+Routing is **disabled by default**. When disabled, Max uses whatever model is set as the default for every request.
+
+## The three tiers
+
+<Columns cols={3}>
+  <Card title="Fast" icon="bolt">
+    Simple questions, quick lookups, short follow-ups. Uses a lightweight model for low latency.
+
+    Default: `gpt-4.1`
+  </Card>
+  <Card title="Standard" icon="circle">
+    Most coding tasks, general reasoning, multi-step problems. The everyday workhorse.
+
+    Default: `claude-sonnet-4.6`
+  </Card>
+  <Card title="Premium" icon="star">
+    Complex design, architecture decisions, UI/UX work, and other tasks that benefit from maximum capability.
+
+    Default: `claude-opus-4.6`
+  </Card>
+</Columns>
+
+<Note>
+  The default model set during `max setup` (stored as `COPILOT_MODEL` in `~/.max/.env`) is used as the standard tier model.
+</Note>
+
+## How routing works
+
+When a message arrives and routing is enabled, Max runs it through a three-step pipeline:
+
+<Steps>
+  <Step title="Check keyword overrides">
+    Overrides are checked first and bypass everything else — including the cooldown. If the message matches a keyword rule, the specified model is used immediately.
+
+    The default override rule:
+
+    | Rule name | Keywords | Target model |
+    |---|---|---|
+    | `design` | design, ui, ux, css, layout, styling, visual, mockup, wireframe, frontend design, tailwind, responsive | `claude-opus-4.6` |
+
+    Keyword matching uses word boundaries, so `"ui"` won't match `"fruit"`.
+  </Step>
+
+  <Step title="Classify with an LLM">
+    If no override matches, Max classifies the message as `fast`, `standard`, or `premium` using GPT-4.1. If the LLM is unavailable, it falls back to `standard`.
+
+    Short follow-up phrases (`yes`, `no`, `do it`, `sure`, `looks good`, etc.) inherit the tier of the previous message rather than being re-classified.
+
+    Background task completion notifications always resolve to `standard`.
+  </Step>
+
+  <Step title="Look up the tier model">
+    The classified tier is mapped to a model using the `tierModels` configuration:
+
+    ```json
+    {
+      "fast": "gpt-4.1",
+      "standard": "claude-sonnet-4.6",
+      "premium": "claude-opus-4.6"
+    }
+    ```
+
+    If the target model differs from the current model, Max destroys the existing orchestrator session and recreates it with the new model before processing the message.
+  </Step>
+</Steps>
+
+### Cooldown
+
+To prevent rapid back-and-forth model switching, Max enforces a cooldown of 2 messages after any tier change. If the classified tier would require a switch but the cooldown is still active, the current model is kept for that message.
+
+## Enabling and disabling routing
+
+<Tabs>
+  <Tab title="Telegram">
+    ```
+    /auto
+    ```
+
+    This toggles routing on or off. When on, replies include a small indicator showing the model used: `⚡ auto · claude-sonnet-4.6`.
+  </Tab>
+  <Tab title="TUI">
+    ```
+    /model
+    ```
+
+    View the current model. Routing state is reflected in the status line.
+  </Tab>
+  <Tab title="Natural language">
+    ```
+    Enable auto model routing.
+    ```
+
+    ```
+    Turn off auto routing and use claude-sonnet-4.6 for everything.
+    ```
+  </Tab>
+</Tabs>
+
+## Manual model override
+
+To use a specific model regardless of routing state:
+
+<Tabs>
+  <Tab title="TUI">
+    ```
+    /model claude-sonnet-4.6
+    ```
+  </Tab>
+  <Tab title="Telegram">
+    ```
+    /model gpt-4.1
+    ```
+  </Tab>
+  <Tab title="Natural language">
+    ```
+    Switch to gpt-4.1
+    ```
+  </Tab>
+</Tabs>
+
+Switching the model this way also turns off auto routing and persists the selection to `~/.max/.env`.
+
+## Viewing and modifying router config
+
+The router configuration is stored in the `router_config` key of Max's SQLite state table (`~/.max/max.db`). You can inspect or update it by asking Max directly:
+
+```
+Show me the current router config.
+```
+
+```
+Update the fast tier to use gpt-4.1-mini.
+```
+
+```
+Add a keyword override: if the message mentions "security audit", use claude-opus-4.6.
+```
+
+The full config structure:
+
+```json
+{
+  "enabled": false,
+  "tierModels": {
+    "fast": "gpt-4.1",
+    "standard": "claude-sonnet-4.6",
+    "premium": "claude-opus-4.6"
+  },
+  "overrides": [
+    {
+      "name": "design",
+      "keywords": ["design", "ui", "ux", "css", "layout", "styling", "visual", "mockup", "wireframe", "frontend design", "tailwind", "responsive"],
+      "model": "claude-opus-4.6"
+    }
+  ],
+  "cooldownMessages": 2
+}
+```
+
+## Routing examples
+
+| Message | Classified tier | Model used |
+|---|---|---|
+| "What's 2 + 2?" | fast | gpt-4.1 |
+| "Yes, do it" (follow-up) | inherits previous | same as previous |
+| "Fix the bug in src/auth.ts" | standard | claude-sonnet-4.6 |
+| "Design a new dashboard layout" | premium (override) | claude-opus-4.6 |
+| "Refactor the entire payments module" | premium | claude-opus-4.6 |
+| "Add a tailwind class to the button" | premium (override) | claude-opus-4.6 |
+
+## When routing is not used
+
+Routing is skipped entirely when:
+
+- **Routing is disabled** (`enabled: false` — the default). Max uses `COPILOT_MODEL` for every message.
+- **A manual model has been set** via `/model <name>`. This overrides the router and sets `enabled: false`.
+- **All tiers map to the same model**. If `fast`, `standard`, and `premium` all point to the same model ID, no switch ever occurs, but classification still runs.

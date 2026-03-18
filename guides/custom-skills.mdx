@@ -1,0 +1,192 @@
+---
+title: Custom skills
+description: Teach Max how to use any CLI tool or external service by writing a SKILL.md file.
+---
+
+Skills are markdown documents that Max reads to learn how to use external tools. They are not code — they are instructions. When Max starts, it loads every `SKILL.md` it finds and injects the contents into its system prompt. From that point on, it knows when and how to run those tools on your behalf.
+
+You can write a skill for anything: a CLI tool, a REST API you call with `curl`, a local script, or any workflow you want Max to follow.
+
+## When to create a custom skill
+
+Create a skill when:
+
+- You have a CLI tool you want Max to invoke correctly.
+- You use a service with a non-obvious interface (specific flags, auth patterns, output formats).
+- You want Max to follow a specific workflow rather than improvise.
+- You want Max to automatically handle a recurring task without re-explaining it every time.
+
+Skills are saved permanently. Max only needs to learn once.
+
+## How to create a skill
+
+<Steps>
+  <Step title="Choose a slug">
+    Pick a lowercase, hyphenated name for your skill. This becomes the directory name under `~/.max/skills/`.
+
+    Good examples: `my-api`, `deploy-tool`, `linear-issues`, `home-automation`.
+
+    The slug must not contain path separators or special characters.
+  </Step>
+
+  <Step title="Ask Max to write the skill (recommended)">
+    The easiest way to create a skill is to ask Max to do it. Describe the tool and Max will research it, write the `SKILL.md`, and install it:
+
+    ```
+    Learn a skill called linear-issues that helps you use the Linear CLI to manage issues.
+    ```
+
+    ```
+    Learn a skill called home-automation that teaches you how to control my Philips Hue lights using the hue CLI.
+    ```
+
+    Max creates the skill in `~/.max/skills/{slug}/` and it becomes available on your next message.
+  </Step>
+
+  <Step title="Or create the SKILL.md manually">
+    Create the skill directory and file yourself:
+
+    ```bash
+    mkdir -p ~/.max/skills/my-tool
+    ```
+
+    Then write `~/.max/skills/my-tool/SKILL.md` with the content described in the [SKILL.md format](#skillmd-format) section below.
+  </Step>
+
+  <Step title="Test the skill">
+    Start or restart Max, then ask it something that should trigger the skill:
+
+    ```
+    Max, use my-tool to do X.
+    ```
+
+    If Max uses the skill correctly, you're done. If it doesn't invoke the tool as expected, revisit the "When to use" section of your `SKILL.md` — Max relies on that section to decide when to activate a skill.
+  </Step>
+</Steps>
+
+## SKILL.md format
+
+Every skill is a directory containing a `SKILL.md` file with YAML frontmatter:
+
+````markdown SKILL.md
+---
+name: My Tool
+description: Brief description of what this skill enables. Used in skill listings.
+---
+
+# My Tool
+
+## When to use
+
+Activate this skill when the user asks about X, mentions Y, or wants to do Z.
+
+## Prerequisites
+
+- `my-tool` must be installed: `brew install my-tool`
+- Must be authenticated: `my-tool auth login`
+
+## Commands
+
+```bash
+# List items
+my-tool list --json
+
+# Create an item
+my-tool create --name "Example" --flag value
+
+# Delete an item
+my-tool delete <id> --force
+```
+
+## Error handling
+
+If `my-tool` returns a non-zero exit code, check whether the user is authenticated.
+If authentication is missing, guide them through `my-tool auth login`.
+````
+
+### What to include
+
+| Section | Purpose |
+|---|---|
+| **Frontmatter** (`name`, `description`) | Shown in skill listings and injected into the system prompt header |
+| **When to use** | Tells Max when to activate this skill — be specific about trigger phrases and task types |
+| **Prerequisites** | Installation and auth steps Max should check or guide the user through |
+| **Commands** | Exact command syntax with flags, including examples with realistic values |
+| **Error handling** | How Max should recover from common failures |
+
+<Tip>
+  The more specific the "When to use" section, the more reliably Max will activate the skill. Vague descriptions lead to the skill being skipped or used at the wrong time.
+</Tip>
+
+## Finding community skills
+
+The [skills.sh](https://skills.sh/) ecosystem has pre-written skills for many popular tools. Ask Max to search for one:
+
+```
+Find a skill for Vercel deployments.
+```
+
+```
+Is there a skill for managing GitHub pull requests?
+```
+
+Max will search the skills.sh API, show you security audit scores for each result, and ask for your confirmation before installing anything.
+
+## Managing skills
+
+### List installed skills
+
+<Tabs>
+  <Tab title="TUI">
+    ```
+    /skills
+    ```
+  </Tab>
+  <Tab title="Telegram">
+    ```
+    /skills
+    ```
+  </Tab>
+  <Tab title="HTTP API">
+    ```bash
+    curl -H "Authorization: Bearer $(cat ~/.max/api-token)" \
+      http://localhost:7777/skills
+    ```
+  </Tab>
+</Tabs>
+
+### Remove a skill
+
+<Tabs>
+  <Tab title="Ask Max">
+    ```
+    Remove the my-tool skill.
+    ```
+  </Tab>
+  <Tab title="HTTP API">
+    ```bash
+    curl -X DELETE \
+      -H "Authorization: Bearer $(cat ~/.max/api-token)" \
+      http://localhost:7777/skills/my-tool
+    ```
+  </Tab>
+  <Tab title="Manually">
+    ```bash
+    rm -rf ~/.max/skills/my-tool
+    ```
+  </Tab>
+</Tabs>
+
+## Skill directories
+
+Max loads skills from three locations, in this order:
+
+| Directory | Source | Notes |
+|---|---|---|
+| `<max-package>/skills/` | Bundled | Ships with Max. Includes `gogcli` and `find-skills`. Read-only. |
+| `~/.max/skills/` | User-installed | Created by `max setup`, `learn_skill`, or manually. |
+| `~/.agents/skills/` | Global shared | Shared across multiple agents on the same machine. |
+
+<Note>
+  Skills in `~/.agents/skills/` are available to any agent that follows the same skill directory convention — not just Max.
+</Note>

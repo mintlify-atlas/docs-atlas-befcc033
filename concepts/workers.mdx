@@ -1,0 +1,163 @@
+---
+title: Workers
+description: Temporary Copilot CLI sessions that Max spawns for coding tasks, file operations, and command execution.
+---
+
+Workers are the hands of Max. While the orchestrator is the brain that decides what to do, workers are the ones that actually touch files, run commands, and write code. Each worker is an independent Copilot CLI session scoped to a specific directory.
+
+## What Workers Are
+
+A worker is a `CopilotSession` created by the orchestrator via `client.createSession()`. Unlike the orchestrator session (which is persistent), workers are temporary — they are created for a task, run in the background, and destroyed when the task completes.
+
+The orchestrator creates a worker when the user asks for something that involves:
+- Writing or modifying code
+- Running shell commands
+- Reading or writing files
+- Anything that needs to operate inside a specific project directory
+
+For simple questions, calculations, or status checks, the orchestrator answers directly without spawning a worker.
+
+## Creating a Worker
+
+The `create_worker_session` tool accepts three parameters:
+
+```typescript
+create_worker_session(
+  name: string,          // Short descriptive name, e.g. "auth-fix"
+  working_dir: string,   // Absolute path to the working directory
+  initial_prompt?: string // Optional task prompt to dispatch immediately
+)
+```
+
+If `initial_prompt` is provided, the task is dispatched in the background and the tool returns immediately with a confirmation message. The orchestrator does not wait.
+
+```
+Orchestrator calls create_worker_session("auth-fix", "~/dev/myapp", "Fix the JWT expiry bug")
+  ↓
+Copilot session created in ~/dev/myapp
+  ↓
+Worker stored in workers Map and worker_sessions SQLite table
+  ↓
+session.sendAndWait(...) dispatched in background — returns immediately
+  ↓
+Orchestrator responds: "On it — I'll let you know when it's done."
+```
+
+## Sending Follow-Up Prompts
+
+To send additional instructions to an existing worker, use `send_to_worker`:
+
+```typescript
+send_to_worker(
+  name: string,    // Name of the existing worker session
+  prompt: string   // The follow-up instruction
+)
+```
+
+Like `create_worker_session` with an initial prompt, this is **non-blocking** — it dispatches the prompt and returns `"Task dispatched to worker 'auth-fix'. I'll notify you when it's done."` immediately.
+
+<Warning>
+  If a worker is currently running (`status: "running"`), `send_to_worker` will return an error asking you to wait or kill the session first.
+</Warning>
+
+## Non-Blocking Execution
+
+All worker tasks run in the background. This is intentional: the orchestrator is single-threaded, and a long-running coding task (which can take minutes) must not block the message queue.
+
+The flow looks like this:
+
+```
+Worker dispatched (non-blocking)
+  ↓
+Orchestrator is free to handle new messages
+  ↓
+[Worker finishes in background]
+  ↓
+feedBackgroundResult(workerName, result)
+  ↓
+Orchestrator receives [Background task completed] message
+  ↓
+Summarizes result and sends to the originating channel (Telegram or TUI)
+```
+
+## Worker Limits
+
+<CardGroup cols={2}>
+  <Card title="Concurrent limit" icon="layer-group">
+    Max 5 workers can run at the same time. Attempting to create a 6th returns an error listing the active sessions.
+  </Card>
+  <Card title="Timeout" icon="clock">
+    Each worker task has a configurable timeout. Default: **600 000 ms (10 minutes)**. Override with `WORKER_TIMEOUT` in `~/.max/.env`.
+
+    If a worker times out, it reports:
+    > "Worker 'name' timed out after Xs (limit: Ys). Set WORKER_TIMEOUT=... to allow more time."
+  </Card>
+</CardGroup>
+
+## Protected Directories
+
+Workers are blocked from operating in sensitive directories. Any attempt to create a worker in these paths is refused:
+
+```
+~/.ssh
+~/.gnupg
+~/.aws
+~/.azure
+~/.config/gcloud
+~/.kube
+~/.docker
+~/.npmrc
+~/.pypirc
+```
+
+Path traversal is also validated — a path like `~/.ssh/../myproject` is resolved and checked against the blocked list.
+
+## Worker Completion & Channel Routing
+
+When a worker finishes, its result is fed back into the orchestrator as a system message:
+
+```
+[Background task completed] Worker 'auth-fix' finished:
+
+<worker output>
+```
+
+The orchestrator processes this message and calls `proactiveNotifyFn`, which routes the summary to the channel that originally sent the request:
+
+- If the message came from **Telegram**, a proactive notification is sent to that chat.
+- If the message came from the **TUI**, it is broadcast to all SSE subscribers.
+
+Each `WorkerInfo` object stores the `originChannel` at creation time so completions always reach the right place.
+
+## Session Management Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_sessions` | List all active workers with name, directory, and status |
+| `check_session_status` | Get detailed status and last output for a specific worker |
+| `kill_session` | Terminate a worker and free its resources |
+| `list_machine_sessions` | List ALL Copilot CLI sessions on the machine (VS Code, terminal, etc.) |
+| `attach_machine_session` | Attach to an existing machine session as a managed worker |
+
+## Worker Data in SQLite
+
+Each worker is persisted to the `worker_sessions` table for observability:
+
+```sql
+CREATE TABLE worker_sessions (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  name            TEXT UNIQUE NOT NULL,
+  copilot_session_id TEXT,
+  working_dir     TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'idle',  -- 'idle' | 'running' | 'error'
+  last_output     TEXT,
+  created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+When a worker completes (or is killed), its row is deleted from this table. You can query active workers via the HTTP API: `GET /workers`.
+
+## Memory Usage
+
+Each Copilot CLI session consumes significant memory (~400 MB). Workers are automatically destroyed after their task completes to reclaim that memory — even if the task fails. This is why the worker limit of 5 is enforced.

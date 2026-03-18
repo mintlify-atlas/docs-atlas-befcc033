@@ -1,0 +1,147 @@
+---
+title: "Installation"
+description: "Install Max on your machine using the curl installer or npm. Requires Node.js 18+ and the GitHub Copilot CLI."
+---
+
+## Prerequisites
+
+Before installing Max, make sure you have the following:
+
+- **Node.js v18 or later** — [nodejs.org](https://nodejs.org)
+- **npm** — included with Node.js
+- **GitHub Copilot CLI** — installed and authenticated
+
+<Note>
+  The installer checks for Node.js and the Copilot CLI automatically and will warn you if either is missing.
+</Note>
+
+### Install the Copilot CLI
+
+If you don't have the Copilot CLI installed yet:
+
+```bash
+npm install -g @github/copilot
+```
+
+Then authenticate:
+
+```bash
+copilot login
+```
+
+You must be authenticated before starting Max. The orchestrator session depends on a valid Copilot CLI login.
+
+## Install Max
+
+There are two ways to install Max. The curl script is preferred — it checks your prerequisites and runs first-time setup automatically.
+
+<CodeGroup>
+
+```bash curl (preferred)
+curl -fsSL https://raw.githubusercontent.com/burkeholland/max/main/install.sh | bash
+```
+
+```bash npm global install
+npm install -g heymax
+```
+
+</CodeGroup>
+
+### What the curl installer does
+
+The `install.sh` script runs the following steps:
+
+1. Checks that Node.js v18+ is installed
+2. Checks that npm is installed
+3. Checks for the Copilot CLI (warns if missing, does not block)
+4. Checks for `gogcli` (optional — enables Gmail, Calendar, Drive)
+5. Runs `npm install -g heymax` to install the `max` command
+6. Launches `max setup` to walk you through first-time configuration
+
+<Tip>
+  If you install via `npm install -g heymax` directly, run `max setup` manually afterwards to create your config.
+</Tip>
+
+## First-time setup
+
+The setup wizard creates `~/.max/` and walks you through configuration:
+
+```bash
+max setup
+```
+
+Setup covers:
+
+- **Telegram** (optional) — provide your bot token and Telegram user ID to enable remote control from your phone
+- **Google services** (optional) — configure `gogcli` for Gmail, Calendar, and Drive access
+- **Default model** — choose from the models available on your Copilot subscription
+
+All settings are saved to `~/.max/.env`. You can re-run `max setup` at any time to change them.
+
+### Optional dependencies
+
+<AccordionGroup>
+  <Accordion title="Telegram (remote access from your phone)">
+    Telegram lets you send messages to Max from your phone and receive notifications when background tasks finish.
+
+    To set it up, you need:
+    1. A Telegram bot token from [@BotFather](https://t.me/BotFather)
+    2. Your Telegram user ID (get it from [@userinfobot](https://t.me/userinfobot))
+
+    Run `max setup` and answer yes when prompted for Telegram configuration.
+
+    <Warning>
+      Set your Telegram user ID during setup. Without it, anyone who finds your bot could send it commands.
+    </Warning>
+  </Accordion>
+  <Accordion title="gogcli (Google services)">
+    The `gogcli` tool enables a bundled skill that gives Max access to Gmail, Google Calendar, and Google Drive.
+
+    Install it with Homebrew:
+
+    ```bash
+    brew install steipete/tap/gogcli
+    ```
+
+    Then configure it through `max setup` → Google services, or follow the [Google services guide](/guides/google-services).
+  </Accordion>
+</AccordionGroup>
+
+## Verify the installation
+
+Confirm Max is installed correctly:
+
+```bash
+max help
+```
+
+Or check the version:
+
+```bash
+max --version
+```
+
+You should see output like:
+
+```
+max v1.2.2 — AI orchestrator powered by Copilot SDK
+
+Usage:
+  max <command>
+
+Commands:
+  start       Start the Max daemon (Telegram bot + HTTP API)
+  tui         Connect to the daemon via terminal UI
+  setup       Interactive first-run configuration
+  update      Check for updates and install the latest version
+  help        Show this help message
+```
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Start the daemon and send your first message.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/environment">
+    Learn about all available configuration options.
+  </Card>
+</CardGroup>

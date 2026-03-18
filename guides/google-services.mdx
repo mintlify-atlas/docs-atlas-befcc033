@@ -1,0 +1,211 @@
+---
+title: Google services
+description: Give Max access to Gmail, Calendar, Drive, Contacts, Tasks, Sheets, and Docs via the gogcli skill.
+---
+
+Max ships with a bundled **gogcli** skill that teaches it how to use the `gog` command-line tool. Once you authenticate, Max can read your inbox, check your calendar, search Drive, manage contacts, complete tasks, and read or update Sheets — all from natural language.
+
+<Note>
+  Google services integration is entirely optional. Max works without it.
+</Note>
+
+## What you can do after setup
+
+<Columns cols={2}>
+  <Card title="Gmail" icon="envelope">
+    Search, read, send, reply to, and draft emails. Manage labels and threads.
+  </Card>
+  <Card title="Calendar" icon="calendar">
+    List events, create meetings, check free/busy time, RSVP to invitations.
+  </Card>
+  <Card title="Drive" icon="folder-open">
+    Search and list files, download or upload documents, share files, create folders.
+  </Card>
+  <Card title="Contacts" icon="address-book">
+    Search, list, and create Google Contacts.
+  </Card>
+  <Card title="Tasks" icon="check-square">
+    List task lists, add tasks, and mark tasks as done.
+  </Card>
+  <Card title="Sheets" icon="table">
+    Read cell ranges and update values in Google Sheets.
+  </Card>
+</Columns>
+
+## Setup
+
+<Steps>
+  <Step title="Install gogcli">
+    Install the `gog` CLI with Homebrew:
+
+    ```bash
+    brew install steipete/tap/gogcli
+    ```
+
+    Verify the install:
+
+    ```bash
+    gog --version
+    ```
+  </Step>
+
+  <Step title="Create Google OAuth credentials">
+    `gog` authenticates using an OAuth 2.0 Desktop app credential you create in Google Cloud:
+
+    1. Go to [https://console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials).
+    2. Create a project if you don't have one.
+    3. Enable the APIs you want to use (Gmail API, Google Calendar API, Google Drive API, etc.).
+    4. Configure the OAuth consent screen (External, your own email as a test user).
+    5. Create an OAuth client — choose type **Desktop app**.
+    6. Download the JSON credentials file.
+
+    Store the credentials file so `gog` can find it:
+
+    ```bash
+    gog auth credentials ~/Downloads/client_secret_....json
+    ```
+  </Step>
+
+  <Step title="Authenticate with your Google account">
+    Run the auth command with the email address you want to grant access:
+
+    ```bash
+    gog auth add your-email@gmail.com
+    ```
+
+    This opens a browser window for the standard Google OAuth consent flow. After you approve, `gog` stores a refresh token locally — you won't need to re-authenticate.
+
+    Check the auth status at any time:
+
+    ```bash
+    gog auth status
+    ```
+  </Step>
+
+  <Step title="Start Max">
+    Max automatically loads the bundled gogcli skill when it starts. No extra configuration is needed:
+
+    ```bash
+    max start
+    ```
+
+    The skill is read from the package's bundled `skills/gogcli/` directory and injected into Max's system prompt at session creation time.
+  </Step>
+
+  <Step title="Test it">
+    Open the TUI or Telegram and ask Max something that requires Google access:
+
+    ```
+    What's in my inbox?
+    ```
+
+    ```
+    What do I have on my calendar today?
+    ```
+
+    ```
+    Search Drive for quarterly report.
+    ```
+
+    Max will run the appropriate `gog` command and return the results.
+  </Step>
+</Steps>
+
+## What the gogcli skill teaches Max
+
+The skill is a `SKILL.md` file bundled with Max at `skills/gogcli/SKILL.md`. It tells Max:
+
+- **When to use it** — whenever you ask about email, calendar, Drive, contacts, or any Google service.
+- **Required flags** — `--json` for parseable output, `--no-input` to prevent the CLI from hanging, `-a email` to target a specific account.
+- **Command syntax** — the exact `gog` subcommands for every supported operation (Gmail search, calendar event creation, Drive file upload, etc.).
+- **Error handling** — how to detect when `gog` is not installed or not authenticated, and how to guide you through setup.
+
+Max reads these instructions at startup and decides when and how to invoke `gog` commands based on what you ask.
+
+## Key commands Max uses
+
+<CodeGroup>
+
+```bash Gmail
+# Search unread emails
+gog gmail search "is:unread" --json
+
+# Read a specific message
+gog gmail get <messageId> --json
+
+# Send an email
+gog send --to "recipient@example.com" --subject "Hello" --body "Message body"
+
+# Reply to a thread
+gog gmail messages reply <messageId> --body "Reply text"
+```
+
+```bash Calendar
+# List today's events
+gog calendar events --json
+
+# Create an event
+gog calendar create primary --summary "Meeting" --start "2025-01-15T10:00:00" --end "2025-01-15T11:00:00"
+
+# Check free/busy
+gog calendar freebusy "user@example.com" --from "2025-01-15" --to "2025-01-16" --json
+```
+
+```bash Drive
+# Search files
+gog search "quarterly report" --json
+
+# Download a file
+gog download <fileId> --output /path/to/save
+
+# Upload a file
+gog upload /path/to/file
+```
+
+</CodeGroup>
+
+## Multiple Google accounts
+
+If you have more than one Google account authenticated, use the `-a` flag to specify which one:
+
+```bash
+gog gmail search "is:unread" -a work@example.com --json
+```
+
+Check which accounts are authenticated:
+
+```bash
+gog auth status
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Max says gog is not installed">
+    Run `gog --version` to confirm the CLI is on your `PATH`. If the command is not found, reinstall:
+
+    ```bash
+    brew install steipete/tap/gogcli
+    ```
+  </Accordion>
+
+  <Accordion title="Max says not authenticated">
+    Run `gog auth status` to check which accounts are active. If no accounts are listed, re-authenticate:
+
+    ```bash
+    gog auth add your-email@gmail.com
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied for a specific API">
+    You may not have enabled the relevant Google API in your Cloud project. Go to the [API library](https://console.cloud.google.com/apis/library) in Google Cloud Console and enable the API (Gmail API, Google Calendar API, etc.), then re-authenticate.
+  </Accordion>
+
+  <Accordion title="Credentials file not found">
+    Re-run the credentials command, pointing to your downloaded JSON file:
+
+    ```bash
+    gog auth credentials ~/Downloads/client_secret_....json
+    ```
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,302 @@
+---
+title: TUI commands
+description: Complete reference for all slash commands and keyboard shortcuts available in the Max terminal UI.
+---
+
+The Max TUI (`max tui`) is a readline-based terminal client that connects to the running daemon over SSE. All communication with Max happens through the terminal prompt.
+
+## Command overview
+
+| Command | Syntax | Description |
+|---------|--------|-------------|
+| `/model` | `/model [name]` | Show or switch the active model |
+| `/auto` | `/auto` | Toggle auto model routing on/off |
+| `/memory` | `/memory` | Show all stored memories |
+| `/skills` | `/skills` | List installed skills |
+| `/workers` | `/workers` | List active worker sessions |
+| `/copy` | `/copy` | Copy the last response to clipboard |
+| `/status` | `/status` | Check daemon health |
+| `/restart` | `/restart` | Restart the daemon |
+| `/cancel` | `/cancel` | Cancel the current in-flight message |
+| `/clear` | `/clear` | Clear the screen |
+| `/help` | `/help` | Show command reference in the terminal |
+| `/quit` | `/quit` | Exit the TUI |
+
+---
+
+## Command reference
+
+### /model
+
+Without an argument, shows the currently active Copilot model. With a model name, switches to that model and persists the change to `~/.max/.env`.
+
+```
+/model
+```
+
+Outputs the current model:
+
+```
+  model: claude-sonnet-4.6
+```
+
+```
+/model gpt-4.1
+```
+
+Switches and confirms:
+
+```
+  model: claude-sonnet-4.6 → gpt-4.1
+```
+
+<Note>
+  The model is validated against what the Copilot CLI reports as available. If the name is not found, Max will suggest close matches.
+</Note>
+
+---
+
+### /auto
+
+Toggles intelligent auto model routing on or off. When enabled, Max classifies each message as `fast`, `standard`, or `premium` and selects the appropriate model automatically. Toggling off returns to the model set by `/model`.
+
+```
+/auto
+```
+
+Outputs the new state:
+
+```
+  ⚡ auto on
+```
+
+or:
+
+```
+  auto off · using claude-sonnet-4.6
+```
+
+---
+
+### /memory
+
+Displays all memories stored in Max's long-term memory, grouped by category. Memories are facts, preferences, projects, people, and routines that Max carries across conversations.
+
+```
+/memory
+```
+
+Example output:
+
+```
+  #1 [preference] Prefers TypeScript over JavaScript
+  #2 [project] Working on auth refactor in ~/dev/myapp
+  #3 [person] Alice is the lead on the payments team
+
+  3 memories total.
+```
+
+If no memories are stored:
+
+```
+  No memories stored.
+```
+
+---
+
+### /skills
+
+Lists all installed skills from all three skill directories:
+
+- **bundled** — shipped with Max (e.g. `find-skills`, `gogcli`)
+- **local** — installed in `~/.max/skills/`
+- **global** — shared across agents in `~/.agents/skills/`
+
+```
+/skills
+```
+
+Displays a table with skill number, name, source, and description. Local skills are highlighted and can be uninstalled interactively: after the table, Max prompts `uninstall #` — enter the number of a local skill to remove it, or press Enter to go back.
+
+<Tip>
+  Only local skills (source: `local`) can be uninstalled from the TUI. Bundled and global skills must be managed outside Max.
+</Tip>
+
+---
+
+### /workers
+
+Lists all active worker sessions with their status and working directory. Worker sessions are child Copilot CLI processes spawned by Max to handle coding tasks in specific directories.
+
+```
+/workers
+```
+
+Example output:
+
+```
+  ● busy  auth-fix     /home/user/dev/myapp
+  ● idle  api-tests    /home/user/dev/api
+```
+
+If no sessions are active:
+
+```
+  No active worker sessions.
+```
+
+---
+
+### /copy
+
+Copies the last response from Max to the system clipboard. Uses `pbcopy` on macOS, and falls back to `xclip` or `xsel` on Linux.
+
+```
+/copy
+```
+
+Outputs:
+
+```
+  ✓ Copied to clipboard.
+```
+
+If no clipboard tool is available:
+
+```
+  Clipboard tool not found (install xclip or xsel).
+```
+
+---
+
+### /status
+
+Prints the raw JSON from `GET /status` — daemon health and current worker list.
+
+```
+/status
+```
+
+Example output:
+
+```json
+{
+  "status": "ok",
+  "workers": [
+    {
+      "name": "auth-fix",
+      "workingDir": "/home/user/dev/myapp",
+      "status": "running"
+    }
+  ]
+}
+```
+
+---
+
+### /restart
+
+Sends a restart request to the daemon. Active worker sessions are destroyed, and a new daemon process is spawned. The TUI reconnects automatically once the new process is ready.
+
+```
+/restart
+```
+
+Outputs:
+
+```
+  ⏳ Max is restarting...
+```
+
+---
+
+### /cancel
+
+Cancels the current in-flight message. Equivalent to pressing `Escape`.
+
+```
+/cancel
+```
+
+Outputs:
+
+```
+  ⛔ cancelled
+```
+
+---
+
+### /clear
+
+Clears the terminal screen.
+
+```
+/clear
+```
+
+---
+
+### /help
+
+Prints the command reference inline in the terminal.
+
+```
+/help
+```
+
+---
+
+### /quit
+
+Exits the TUI. Also accepts `/exit`. The history file is trimmed to the last 1,000 entries before exit.
+
+```
+/quit
+```
+
+---
+
+## Keyboard shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Escape` | Cancel the current in-flight response (same as `/cancel`) |
+| `Ctrl+C` | Exit the TUI (same as `/quit`) |
+| `↑` / `↓` | Navigate command and message history |
+
+---
+
+## Input history
+
+The TUI maintains persistent input history in `~/.max/tui_history`. History is capped at 1,000 entries. Regular messages (not slash commands) are saved to history. Use the up and down arrow keys to navigate previous inputs.
+
+---
+
+## Connecting to the daemon
+
+The TUI connects to the daemon at `http://127.0.0.1:7777` by default. Set the `MAX_API_URL` environment variable to override:
+
+```bash
+MAX_API_URL=http://127.0.0.1:8888 max tui
+```
+
+The TUI reads the API token automatically from `~/.max/api-token`. If the daemon is not running, you will see:
+
+```
+  ✗ cannot connect to daemon
+    start with: max start
+```
+
+The TUI retries the connection every few seconds and reconnects automatically if the daemon restarts.
+
+---
+
+## Debug logging
+
+Set `MAX_TUI_DEBUG=1` to write detailed lifecycle logs to `~/.max/tui-debug.log`:
+
+```bash
+MAX_TUI_DEBUG=1 max tui
+```
+
+The log contains timestamped JSON entries for every SSE event, stream chunk, and user input.

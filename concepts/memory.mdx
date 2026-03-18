@@ -1,0 +1,185 @@
+---
+title: Memory
+description: How Max stores and retrieves long-term knowledge — categories, sources, tools, and injection into the system message.
+---
+
+Max has two types of memory: the **conversation log** (a rolling transcript of recent turns used for session recovery) and **long-term memory** (persistent facts that survive restarts and are injected into every session's system message).
+
+This page covers long-term memory.
+
+## The `memories` Table
+
+Long-term memories are stored in SQLite at `~/.max/max.db`:
+
+```sql
+CREATE TABLE memories (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  category     TEXT NOT NULL CHECK(category IN ('preference', 'fact', 'project', 'person', 'routine')),
+  content      TEXT NOT NULL,
+  source       TEXT NOT NULL DEFAULT 'user',  -- 'user' | 'auto'
+  created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+  last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## Categories
+
+<CardGroup cols={2}>
+  <Card title="preference" icon="sliders">
+    Likes, dislikes, settings, and stylistic choices. Example: *"Prefers TypeScript over JavaScript"*
+  </Card>
+  <Card title="fact" icon="circle-info">
+    General knowledge statements. Example: *"Uses a standing desk and works best in the morning"*
+  </Card>
+  <Card title="project" icon="folder">
+    Codebase and repository context. Example: *"The auth service lives in ~/dev/api/src/auth"*
+  </Card>
+  <Card title="person" icon="user">
+    Information about people. Example: *"Sarah is the team lead for the payments squad"*
+  </Card>
+  <Card title="routine" icon="calendar">
+    Schedules and habits. Example: *"Daily standup is at 9:30 AM Pacific"*
+  </Card>
+</CardGroup>
+
+## Sources
+
+Every memory records how it was created:
+
+- **`user`** — the user explicitly asked Max to remember something (`"Remember that I prefer TypeScript over JavaScript"`)
+- **`auto`** — Max detected information worth preserving and saved it proactively (without being asked)
+
+## Memory Operations
+
+### `remember` — save a memory
+
+```typescript
+remember(
+  category: "preference" | "fact" | "project" | "person" | "routine",
+  content: string,   // Concise, self-contained statement
+  source?: "user" | "auto"  // Defaults to "user"
+)
+```
+
+**Example interaction:**
+```
+User:  Remember that I prefer TypeScript over JavaScript
+Max:   Remembered (#12, preference): "Prefers TypeScript over JavaScript"
+```
+
+Max also saves memories proactively (using `source: "auto"`) when it detects project details, preferences, or routines mentioned in passing — no explicit request required.
+
+### `recall` — search memories
+
+```typescript
+recall(
+  keyword?: string,  // Substring match against content
+  category?: "preference" | "fact" | "project" | "person" | "routine"
+)
+```
+
+Returns up to 20 matching memories, ordered by `last_accessed DESC`. Accessing a memory updates its `last_accessed` timestamp.
+
+**Example:**
+```
+recall(keyword: "TypeScript")
+→ Found 1 memory:
+  • #12 [preference] Prefers TypeScript over JavaScript (user, 2025-03-01)
+```
+
+### `forget` — remove a memory
+
+```typescript
+forget(
+  memory_id: number  // The numeric ID from recall results
+)
+```
+
+Permanently deletes the memory. To find the ID, use `recall` first.
+
+```
+User:  Forget memory 12
+Max:   Memory #12 forgotten.
+```
+
+## Memory Injection
+
+`getMemorySummary()` formats all memories grouped by category and injects them into the system message each time the orchestrator session is created or resumed:
+
+```
+## Long-Term Memory
+These are things you've been asked to remember or have noted as important:
+
+**preference**:
+  - [#12] Prefers TypeScript over JavaScript
+
+**project**:
+  - [#7] The auth service lives in ~/dev/api/src/auth
+  - [#9] Uses pnpm as the package manager
+
+**routine**:
+  - [#3] Daily standup is at 9:30 AM Pacific
+```
+
+<Note>
+  Memory is injected at **session creation time**. A newly saved memory takes effect on the next session — after a model switch, a daemon restart, or a session recreation triggered by a recoverable error.
+</Note>
+
+## Conversation Log
+
+Separate from long-term memory, Max maintains a `conversation_log` table that records every user and assistant turn:
+
+```sql
+CREATE TABLE conversation_log (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  role    TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
+  content TEXT NOT NULL,
+  source  TEXT NOT NULL DEFAULT 'unknown',  -- 'telegram' | 'tui' | 'unknown'
+  ts      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Retention:** The log is pruned to the last 200 entries at startup and every 50 inserts.
+
+**Purpose:** Context recovery. If the orchestrator session is lost (crash, invalid session ID), Max injects the last 10 log entries into the new session as a recovery prompt so the model has recent context:
+
+```
+[System: Session recovered] Your previous session was lost.
+Here's the recent conversation for context — do NOT respond to these
+messages, just absorb the context silently:
+
+[telegram] User: Fix the JWT expiry bug
+Max: On it — I'll let you know when auth-fix finishes.
+...
+(End of recovery context. Wait for the next real message.)
+```
+
+## Viewing Memories
+
+You can inspect stored memories in several ways:
+
+<AccordionGroup>
+  <Accordion title="TUI command">
+    ```
+    /memory
+    ```
+    Prints all stored memories grouped by category in your terminal.
+  </Accordion>
+  <Accordion title="HTTP API">
+    ```bash
+    # List all memories
+    curl -H "Authorization: Bearer $(cat ~/.max/api-token)" \
+      http://localhost:7777/memories
+
+    # Filter by category
+    curl -H "Authorization: Bearer $(cat ~/.max/api-token)" \
+      "http://localhost:7777/memories?category=preference"
+    ```
+  </Accordion>
+  <Accordion title="Natural language">
+    ```
+    User: What do you know about my projects?
+    Max:  [calls recall(category: "project")] ...
+    ```
+  </Accordion>
+</AccordionGroup>

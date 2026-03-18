@@ -1,0 +1,86 @@
+---
+title: Telegram
+description: Configure Max's Telegram bot to control your daemon remotely from any device.
+---
+
+Telegram is optional — Max works fully without it via the terminal UI (`max tui`). But Telegram is the best way to interact with Max when you're away from your machine: send tasks from your phone, get notified when background work finishes, and check on running workers from anywhere.
+
+## Required values
+
+Two environment variables must both be present for Telegram to be enabled:
+
+<ParamField path="TELEGRAM_BOT_TOKEN" type="string" required>
+  The HTTP API token issued by @BotFather when you create a bot.
+
+  Example: `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`
+</ParamField>
+
+<ParamField path="AUTHORIZED_USER_ID" type="string" required>
+  Your numeric Telegram user ID. Max only responds to this user.
+
+  Example: `123456789`
+</ParamField>
+
+When either value is missing, `config.telegramEnabled` is `false` and the bot is not started.
+
+## How Max authenticates
+
+Max does not use Telegram's built-in privacy settings for access control. Instead, every incoming update is checked in middleware:
+
+- If the sender's user ID matches `AUTHORIZED_USER_ID`, the message is processed normally.
+- If the sender is anyone else, the update is **silently dropped** — no error, no reply.
+
+This means even if someone discovers your bot's username, they cannot interact with Max at all.
+
+<Warning>
+  Never share your bot token. Anyone with the token can impersonate your bot and observe traffic. Rotate it via @BotFather immediately if it is compromised.
+</Warning>
+
+## Bot commands
+
+Once your bot is running, these slash commands are available in any Telegram chat with it:
+
+| Command | Description |
+|---------|-------------|
+| `/cancel` | Cancel the current in-flight message being processed by the orchestrator. |
+| `/model` | Show the current model, or switch to a new one (e.g. `/model gpt-4.1`). |
+| `/memory` | Display stored long-term memories. |
+| `/skills` | List all installed skills. |
+| `/workers` | Show active background worker sessions and their status. |
+| `/restart` | Restart the Max daemon. |
+
+All other messages are forwarded to the orchestrator as plain text.
+
+## Security recommendations
+
+<AccordionGroup>
+  <Accordion title="Lock the bot to your user ID">
+    Always set `AUTHORIZED_USER_ID`. Without it, `config.telegramEnabled` returns `false` even if a token is present, so the bot will not start. But if you manually bypass this check, anyone who finds your bot can send it commands.
+  </Accordion>
+  <Accordion title="Disable group joins">
+    By default, any Telegram user can add your bot to a group chat. Prevent this:
+
+    1. Open @BotFather
+    2. Send `/mybots` → select your bot → **Bot Settings** → **Allow Groups?**
+    3. Set to **Disable**
+  </Accordion>
+  <Accordion title="Rotate your token if exposed">
+    If your `TELEGRAM_BOT_TOKEN` is ever committed to a repository or shared accidentally:
+
+    1. Open @BotFather and send `/revoke`
+    2. Generate a new token
+    3. Update `~/.max/.env` and restart the daemon
+  </Accordion>
+</AccordionGroup>
+
+## Setting up Telegram
+
+For a step-by-step walkthrough of creating a bot and obtaining your user ID, see the [Telegram setup guide](/guides/telegram-setup).
+
+You can also re-run the interactive wizard at any time:
+
+```bash
+max setup
+```
+
+The wizard walks you through @BotFather, obtaining your user ID, and disabling group joins, then writes the values to `~/.max/.env`.

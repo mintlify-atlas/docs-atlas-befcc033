@@ -1,0 +1,134 @@
+---
+title: Environment variables
+description: All configuration options read from ~/.max/.env, including types, defaults, and how to persist changes.
+---
+
+Max reads its configuration from `~/.max/.env` at startup. You can edit this file directly or re-run `max setup` to regenerate it interactively.
+
+## Config file location
+
+```
+~/.max/.env
+```
+
+This file is created automatically the first time you run `max setup`. If it doesn't exist, Max falls back to a `.env` file in the current working directory (for development use only).
+
+## Environment variables
+
+<ParamField path="TELEGRAM_BOT_TOKEN" type="string">
+  The token issued by @BotFather when you create a Telegram bot. Required for Telegram integration. When absent, Max runs without Telegram support.
+
+  Example: `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`
+</ParamField>
+
+<ParamField path="AUTHORIZED_USER_ID" type="string">
+  Your numeric Telegram user ID. Max silently ignores all messages from any other user. Required alongside `TELEGRAM_BOT_TOKEN` for Telegram to be enabled.
+
+  Must be a positive integer (e.g. `123456789`). Obtain yours by messaging @userinfobot on Telegram.
+</ParamField>
+
+<ParamField path="API_PORT" type="number" default="7777">
+  The port the local HTTP API server listens on. The TUI connects to this port via Server-Sent Events. Must be in the range 1–65535.
+
+  Change this if port 7777 conflicts with another service on your machine.
+</ParamField>
+
+<ParamField path="COPILOT_MODEL" type="string" default="claude-sonnet-4.6">
+  The AI model used by the orchestrator session. Must be a model ID available in your authenticated Copilot CLI.
+
+  You can switch models at runtime with `/model` in the TUI — changes are persisted back to this file automatically via `persistModel()`.
+</ParamField>
+
+<ParamField path="WORKER_TIMEOUT" type="number" default="600000">
+  How long (in milliseconds) a worker session may run before it is considered timed out. Defaults to 600,000 ms (10 minutes).
+
+  Must be a positive integer. Increase this for long-running coding or build tasks.
+</ParamField>
+
+<ParamField path="MAX_SELF_EDIT" type="string">
+  When set to `"1"`, Max is permitted to modify its own source code. This flag is **not** written to `~/.max/.env` by `max setup` — it must be set manually or passed via the `--self-edit` CLI flag when starting the daemon.
+
+  Omit this variable (or set it to anything other than `"1"`) to keep Max from touching its own code.
+</ParamField>
+
+## Example `.env` file
+
+```ini ~/.max/.env
+# Telegram Bot Token (from @BotFather)
+TELEGRAM_BOT_TOKEN=your-bot-token-here
+
+# Your Telegram user ID (send any message to @userinfobot to get it)
+AUTHORIZED_USER_ID=123456789
+
+# Local API port for TUI (default: 7777)
+API_PORT=7777
+
+# Copilot model (default: claude-sonnet-4.6)
+COPILOT_MODEL=claude-sonnet-4.6
+```
+
+## How to edit
+
+<Tabs>
+  <Tab title="Interactive setup">
+    Re-run the setup wizard to reconfigure Telegram, Google services, and the default model:
+
+    ```bash
+    max setup
+    ```
+
+    The wizard reads your existing values and presents them as defaults, so you only need to change what you want.
+  </Tab>
+  <Tab title="Direct file edit">
+    Open the file in any editor:
+
+    ```bash
+    nano ~/.max/.env
+    ```
+
+    After saving, restart the daemon for changes to take effect:
+
+    ```bash
+    max start
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  `COPILOT_MODEL` is the one variable that can be changed at runtime without a restart. Sending `/model gpt-4.1` in the TUI writes the new value to `~/.max/.env` immediately and the daemon picks it up in the same session.
+</Note>
+
+## Config object
+
+Internally, Max parses and validates `~/.max/.env` using [Zod](https://zod.dev) and exposes a typed singleton:
+
+```typescript src/config.ts
+export const config = {
+  telegramBotToken: string | undefined,
+  authorizedUserId: number | undefined,  // parsed from AUTHORIZED_USER_ID
+  apiPort: number,                        // parsed from API_PORT, default 7777
+  workerTimeoutMs: number,                // parsed from WORKER_TIMEOUT, default 600000
+  copilotModel: string,                   // getter/setter — supports runtime switching
+
+  // Derived properties
+  telegramEnabled: boolean,  // true when both token and userId are set
+  selfEditEnabled: boolean,  // true when MAX_SELF_EDIT === "1"
+};
+```
+
+`copilotModel` is the only property with a setter, enabling the `/model` command to switch models without a daemon restart.
+
+## Persistence helpers
+
+Two functions handle writing values back to `~/.max/.env`:
+
+**`persistEnvVar(key, value)`** — Updates an existing `KEY=value` line in `~/.max/.env`, or appends it if the key is not present. Creates the file if it doesn't exist.
+
+**`persistModel(model)`** — A thin wrapper around `persistEnvVar` that writes `COPILOT_MODEL=<model>`. Called automatically whenever you switch models via `/model` or by telling Max to switch.
+
+```typescript src/config.ts
+// Internally called on every model switch
+export function persistModel(model: string): void {
+  persistEnvVar("COPILOT_MODEL", model);
+}
+```

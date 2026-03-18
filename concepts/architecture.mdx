@@ -1,0 +1,121 @@
+---
+title: Architecture
+description: How Max is structured — daemon, orchestrator, workers, HTTP API, and data flow from message to response.
+---
+
+Max is a single daemon process that runs persistently on your machine. All AI work happens locally through the GitHub Copilot SDK — no cloud sync, no external state. Messages arrive from Telegram, the TUI, or programmatic API clients, pass through a serialized message queue, and are handled by a long-running orchestrator session that can spawn short-lived worker sessions for heavier tasks.
+
+## High-Level Diagram
+
+```
+Telegram Bot ──→ ┌─────────────────┐ ←── TUI Terminal UI
+                 │  Max Daemon     │
+              ┌─ │ (HTTP API:7777) │ ←── API Clients
+              │  │                 │
+              │  │ Orchestrator    │
+              │  │ Session (Copilot)│
+              │  └────────┬────────┘
+              │           │
+              └───────────┼────────────────────┐
+                   ┌──────┴──────┐             │
+                 Worker 1    Worker 2    Worker N
+                (Copilot CLI sessions)
+```
+
+## Components
+
+<CardGroup cols={2}>
+  <Card title="Daemon" icon="server">
+    The persistent `max start` process. Owns the Copilot SDK client, orchestrator session, HTTP API server, and Telegram bot. All other interfaces connect to it.
+  </Card>
+  <Card title="TUI" icon="terminal">
+    A lightweight terminal client (`max tui`) that connects to the daemon over localhost SSE. No AI logic runs here — it's a display and input layer only.
+  </Card>
+  <Card title="Orchestrator" icon="brain">
+    A single, long-running Copilot SDK session. It receives every message, routes it to the right model, executes tools, and streams responses back to the caller.
+  </Card>
+  <Card title="Workers" icon="code">
+    Temporary Copilot CLI sessions spawned on demand for coding tasks, file operations, and command execution. Up to 5 run concurrently; each is destroyed after completing its task.
+  </Card>
+  <Card title="HTTP API" icon="globe">
+    An Express server on port 7777. Exposes `POST /send`, `GET /events` (SSE), `/workers`, `/memories`, `/skills`, and more. Authentication via bearer token stored in `~/.max/api-token`.
+  </Card>
+  <Card title="Telegram Bot" icon="paper-plane">
+    Optional remote interface using the grammy library. Authenticated by a single authorized user ID — all other senders are silently ignored.
+  </Card>
+</CardGroup>
+
+## Data Flow
+
+<Steps>
+  <Step title="Message arrives">
+    A message arrives from Telegram, the TUI (via `POST /send`), or a background worker completion. It is tagged with its source channel (`[via telegram]`, `[via tui]`, or left untagged for background).
+  </Step>
+  <Step title="Enqueued">
+    The tagged message is pushed onto the `messageQueue`. The queue is processed one entry at a time — if the orchestrator is busy, new messages wait rather than interleaving.
+  </Step>
+  <Step title="Model resolved">
+    Before execution, `resolveModel()` runs. In auto mode it classifies the message as `fast`, `standard`, or `premium` and selects the appropriate model. Keyword-based overrides (e.g. design tasks) take precedence. If the model changes, the orchestrator session is destroyed and recreated.
+  </Step>
+  <Step title="Orchestrator executes">
+    `session.sendAndWait()` runs with a 300-second timeout. As the model streams its response, `assistant.message_delta` events accumulate and are forwarded to the caller's callback in real time.
+  </Step>
+  <Step title="Tools fire">
+    If the model calls a tool (e.g. `create_worker_session`, `remember`), the tool handler runs synchronously inside the `sendAndWait` call. Worker tasks are dispatched in the background and return immediately.
+  </Step>
+  <Step title="Response delivered">
+    The final response is delivered to the originating channel (Telegram message, TUI SSE stream, or API response). Both sides of the conversation are written to the `conversation_log` table.
+  </Step>
+</Steps>
+
+## Deployment Model
+
+<Note>
+  Max is designed as a **single-machine, single-user daemon**. All data stays on your machine — there is no cloud sync, no remote database, and no multi-user support.
+</Note>
+
+| Property | Detail |
+|---|---|
+| Process model | One persistent daemon (`max start`) |
+| AI runtime | GitHub Copilot SDK (auto-started if not running) |
+| Networking | Localhost only (`127.0.0.1:7777`) for the API; Telegram uses outbound polling |
+| Persistence | SQLite at `~/.max/max.db` |
+| Copilot config | Reads `~/.copilot/mcp-config.json` for MCP servers |
+
+## `~/.max/` Directory Layout
+
+```
+~/.max/
+├── .env               # Config: model, Telegram token, API port, worker timeout
+├── max.db             # SQLite: sessions, state, conversation log, memories
+├── api-token          # Bearer token for HTTP API (generated once, mode 0o600)
+├── tui_history        # Readline history for the TUI
+├── sessions/          # Copilot SDK session storage (keeps history clean)
+└── skills/            # User-installed skills (each a directory with SKILL.md)
+    └── {slug}/
+        ├── SKILL.md
+        └── _meta.json
+```
+
+## Boot Sequence
+
+```
+max start
+  ↓
+cli.ts → daemon.ts main()
+  ↓
+1. Load config from ~/.max/.env
+2. Initialize SQLite (~/.max/max.db)
+3. Create/connect CopilotClient (autoStart: true)
+4. Init orchestrator:
+   - Load MCP servers from ~/.copilot/mcp-config.json
+   - Load skills from ~/.max/skills/, ~/.agents/skills/
+   - Resume or create persistent orchestrator session
+   - Inject recent conversation context if recovering
+   - Start 30s health check loop
+5. Start Express API server (port 7777)
+6. Start Telegram bot (if configured)
+7. Wire up proactive notifications
+8. Non-blocking update check
+9. Ready for messages
+```

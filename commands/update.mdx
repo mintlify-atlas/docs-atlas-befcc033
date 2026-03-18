@@ -1,0 +1,83 @@
+---
+title: max update
+description: Check the npm registry for a newer version of Max and install it automatically.
+---
+
+`max update` checks whether a newer version of the `heymax` npm package is available and, if so, installs it with `npm install -g heymax@latest`.
+
+```bash
+max update
+```
+
+## How it works
+
+<Steps>
+  <Step title="Read the local version">
+    The current version is read from the installed package's `package.json`.
+  </Step>
+  <Step title="Query the npm registry">
+    Runs `npm view heymax version` with a 10-second timeout to fetch the latest published version.
+  </Step>
+  <Step title="Compare versions">
+    Compares the two semver strings. If the registry version is higher, an update is available.
+  </Step>
+  <Step title="Install (if needed)">
+    Runs `npm install -g heymax@latest` with a 60-second timeout and streams the result to the terminal.
+  </Step>
+</Steps>
+
+## Possible outcomes
+
+### Already up to date
+
+```text
+max v1.2.3 is already the latest version.
+```
+
+No action is taken.
+
+### Update available
+
+```text
+Update available: v1.2.3 → v1.3.0
+Installing...
+✅ Updated to v1.3.0
+```
+
+### Update failed
+
+```text
+Update available: v1.2.3 → v1.3.0
+Installing...
+❌ Update failed: <npm error output>
+```
+
+The process exits with code `1`. Check npm permissions and try the manual update below.
+
+### Network unavailable
+
+```text
+⚠ Could not reach the npm registry. Check your network and try again.
+```
+
+The process exits with code `1`.
+
+## Manual update
+
+If `max update` fails, install directly:
+
+```bash
+npm install -g heymax@latest
+```
+
+<Tip>
+If you see a permissions error on macOS or Linux, you may need to fix npm's global prefix ownership rather than using `sudo`. See the [npm docs on fixing permissions](https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally).
+</Tip>
+
+## Background update notifications
+
+When `max start` boots, it also performs a non-blocking update check. If a newer version is available, a notice is printed to the daemon's terminal output — but the daemon keeps running and no update is installed automatically:
+
+```text
+[max] ⬆ Update available: v1.2.3 → v1.3.0  —  run 'max update' to install
+```

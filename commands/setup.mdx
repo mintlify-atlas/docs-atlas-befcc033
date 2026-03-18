@@ -1,0 +1,105 @@
+---
+title: max setup
+description: Interactive first-run configuration wizard — sets up Telegram, Google services, and the default Copilot model.
+---
+
+`max setup` walks you through configuring Max. Run it once before `max start`, or re-run it any time to update your settings.
+
+```bash
+max setup
+```
+
+The wizard creates `~/.max/` if it does not exist, loads any existing values, and writes the final configuration to `~/.max/.env`.
+
+## What it configures
+
+| Setting | Required | Description |
+|---------|----------|-------------|
+| Telegram bot token | No | Connects Max to a Telegram bot you own |
+| Authorized user ID | No (but required if Telegram enabled) | Locks the bot to your Telegram user ID |
+| Google services | No | Guides `gog` CLI setup for Gmail, Calendar, and Drive |
+| Default model | Yes | The Copilot model Max uses by default |
+
+## Wizard walkthrough
+
+<Steps>
+  <Step title="Introduction">
+    The wizard prints an overview of Max's capabilities — coding sessions, skills, and the two ways to talk to Max (TUI and Telegram). Press **Enter** to continue.
+  </Step>
+
+  <Step title="Telegram setup (optional)">
+    You are asked whether to set up Telegram. If you answer **yes**, the wizard guides you through three sub-steps:
+
+    1. **Create a bot** — open `@BotFather` on Telegram, send `/newbot`, and paste the bot token.
+    2. **Lock it down** — find your numeric Telegram user ID via `@userinfobot` and enter it. Only this user ID will be able to send commands to Max.
+    3. **Disable group joins** (recommended) — use `@BotFather` → `Bot Settings` → `Allow Groups?` → **Disable**.
+
+    <Warning>
+    Without an authorized user ID, anyone who discovers your bot token can control Max. The wizard enforces that a valid numeric user ID is entered before proceeding.
+    </Warning>
+
+    If you skip Telegram, you can always enable it later by re-running `max setup`.
+  </Step>
+
+  <Step title="Google services setup (optional)">
+    Max includes a `gogcli` skill for Gmail, Calendar, and Drive. The wizard guides you through:
+
+    1. **Install the `gog` CLI** — `brew install steipete/tap/gogcli`
+    2. **Create OAuth credentials** in Google Cloud Console and run `gog auth credentials <path-to-json>`.
+    3. **Authenticate** with `gog auth add your-email@gmail.com`.
+
+    This step is optional and can be skipped and completed later.
+  </Step>
+
+  <Step title="Select a default model">
+    The wizard queries the Copilot SDK for available models and presents a numbered list. Use the arrow keys or enter a number to pick one. Press **Enter** to accept the highlighted default.
+
+    If the Copilot CLI is not yet authenticated, a curated fallback list is shown instead:
+
+    - `claude-sonnet-4.6` — Fast, great for most tasks
+    - `gpt-5.1` — OpenAI's fast model
+    - `gpt-4.1` — Free included model
+
+    You can switch models at any time from the TUI with `/model <name>`, or just by telling Max in plain English.
+  </Step>
+
+  <Step title="Config written">
+    The wizard writes `~/.max/.env` and prints the next steps.
+  </Step>
+</Steps>
+
+## Config file
+
+All settings are stored in `~/.max/.env` as plain `KEY=VALUE` pairs:
+
+```bash
+# ~/.max/.env
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+AUTHORIZED_USER_ID=123456789
+API_PORT=7777
+COPILOT_MODEL=claude-sonnet-4.6
+```
+
+| Variable | Description |
+|----------|-------------|
+| `TELEGRAM_BOT_TOKEN` | Bot token from `@BotFather`. Omitted if Telegram was skipped. |
+| `AUTHORIZED_USER_ID` | Your Telegram user ID. Omitted if Telegram was skipped. |
+| `API_PORT` | Port the HTTP API listens on. Defaults to `7777`. |
+| `COPILOT_MODEL` | Model ID used by the orchestrator. Defaults to `claude-sonnet-4.6`. |
+
+<Note>
+You can edit `~/.max/.env` directly at any time. Changes take effect on the next `max start`.
+</Note>
+
+## After setup
+
+```bash
+# 1. Authenticate the Copilot CLI if you haven't already
+copilot login
+
+# 2. Start Max
+max start
+
+# 3. Connect via terminal
+max tui
+```

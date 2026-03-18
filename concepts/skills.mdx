@@ -1,0 +1,187 @@
+---
+title: Skills
+description: Documentation files that teach Max how to use external tools — what they are, how they're structured, and how to install them.
+---
+
+Skills are the way Max learns to use tools it wasn't born knowing about. Each skill is a directory containing a `SKILL.md` file — a markdown document with instructions that Max reads at session startup. Skills are not code. They're documentation.
+
+## What Skills Are (and Aren't)
+
+<CardGroup cols={2}>
+  <Card title="Skills ARE" icon="check">
+    - Markdown instruction files
+    - Documentation on when and how to use a CLI tool
+    - Injected into the orchestrator's system message at session creation
+    - Persistent across restarts
+  </Card>
+  <Card title="Skills are NOT" icon="xmark">
+    - Executable scripts or plugins
+    - Code that runs on your behalf
+    - A package manager or binary installer
+    - Automatically trusted — Max always asks before installing
+  </Card>
+</CardGroup>
+
+The external tool itself (e.g. `gog`, `curl`, a custom CLI) must be installed separately on your machine. The skill just tells Max how to use it.
+
+## Skill Format
+
+Every skill is a directory with two files:
+
+<CodeGroup>
+```markdown SKILL.md
+---
+name: Google (gogcli)
+description: Access Gmail, Calendar, Drive, etc. via gog CLI
+---
+
+# Detailed instructions for Max on how to use this skill
+
+## When to use
+Use this skill whenever the user asks about email, calendar events,
+Drive files, contacts, or tasks.
+
+## Authentication
+Run `gog auth add email@gmail.com` once to authorize.
+
+## Common commands
+- List inbox: `gog mail list`
+- Send email: `gog mail send --to addr --subject "..." --body "..."`
+- List calendar: `gog cal list --days 7`
+
+## Tips
+- Always confirm before sending email or creating calendar events.
+- Use --json flag for machine-readable output.
+```
+
+```json _meta.json
+{
+  "slug": "gogcli",
+  "version": "1.0.0"
+}
+```
+</CodeGroup>
+
+The YAML frontmatter (between the `---` delimiters) provides the `name` and `description` used in listings. Everything after the second `---` is the instruction body injected into the system message.
+
+## Three Skill Tiers
+
+Max looks for skills in three directories, in this priority order:
+
+<Steps>
+  <Step title="Bundled skills">
+    Ships inside the Max package itself:
+    ```
+    <package>/skills/
+    ```
+    Contains `find-skills` and `gogcli`. Cannot be removed with `uninstall_skill`.
+  </Step>
+  <Step title="User-installed skills">
+    Skills you install via `learn_skill` or by copying files manually:
+    ```
+    ~/.max/skills/
+    ```
+    This is the default install target for all skills found via `find-skills`.
+  </Step>
+  <Step title="Global skills">
+    Shared across multiple AI agents on the same machine:
+    ```
+    ~/.agents/skills/
+    ```
+    Max reads from this directory but never writes to it.
+  </Step>
+</Steps>
+
+## Skill Injection
+
+At session creation time, the Copilot SDK receives the list of skill directories via `skillDirectories`. The SDK reads each `SKILL.md` and includes the instruction body in the session's system context. This means:
+
+- Skills are always available from the first message of a session
+- Installing a new skill takes effect on the **next** message (which may trigger a session refresh) or at the latest on the next daemon restart
+- Skill instructions are read-only from Max's perspective — Max cannot modify a `SKILL.md` during a session
+
+## Skill Management Tools
+
+### `learn_skill` — create a new skill
+
+```typescript
+learn_skill(
+  slug: string,          // kebab-case identifier, e.g. "web-search"
+  name: string,          // Human-readable name, e.g. "Web Search"
+  description: string,   // One-line: when to use this skill
+  instructions: string   // Full markdown body for SKILL.md
+)
+```
+
+Creates `~/.max/skills/{slug}/SKILL.md` and `~/.max/skills/{slug}/_meta.json`. Guards against path traversal — slashes in the slug are rejected.
+
+**Example:**
+```
+User:  Teach yourself how to use ripgrep
+Max:   [creates worker to run `which rg && rg --help`]
+       [calls learn_skill("ripgrep", "Ripgrep", "Fast code search", "...")]
+       Skill 'Ripgrep' created. Available on your next message.
+```
+
+### `uninstall_skill` — remove a skill
+
+```typescript
+uninstall_skill(
+  slug: string  // The kebab-case slug of the skill to remove
+)
+```
+
+Deletes `~/.max/skills/{slug}/`. Only works for user-installed skills — bundled and global skills are not affected.
+
+<Warning>
+  Only local skills (`~/.max/skills/`) can be removed with `uninstall_skill`. Bundled skills (packaged with Max) and global skills (`~/.agents/skills/`) are read-only from Max's perspective.
+</Warning>
+
+## Bundled Skills
+
+### `find-skills`
+
+Teaches Max how to discover and install community skills from [skills.sh](https://skills.sh):
+
+- Searches the skills.sh API: `https://skills.sh/api/search?q=...`
+- Fetches security audit scores from `https://skills.sh/audits`
+- Presents the skill name, description, install count, and security status before asking permission
+- Installs by fetching the `SKILL.md` from the skill's GitHub repository and calling `learn_skill`
+
+<Note>
+  Max **always asks before installing** a skill found via `find-skills`. It will never auto-install without explicit confirmation. Security audit data is always shown — it is never omitted.
+</Note>
+
+### `gogcli`
+
+Teaches Max how to use the `gog` CLI for Google services:
+
+- Gmail (list, read, send, search)
+- Google Calendar (list events, create events)
+- Google Drive (list files, read, upload)
+- Contacts, Tasks, Sheets, Docs
+
+Requires `gogcli` to be installed (`brew install steipete/tap/gogcli`) and authenticated (`gog auth add email@gmail.com`).
+
+## Viewing Skills
+
+<AccordionGroup>
+  <Accordion title="TUI command">
+    ```
+    /skills
+    ```
+    Lists all installed skills with name, source tier (bundled/local/global), and description.
+  </Accordion>
+  <Accordion title="HTTP API">
+    ```bash
+    curl -H "Authorization: Bearer $(cat ~/.max/api-token)" \
+      http://localhost:7777/skills
+    ```
+  </Accordion>
+  <Accordion title="Natural language">
+    ```
+    User: What skills do you have?
+    Max:  [calls list_skills] ...
+    ```
+  </Accordion>
+</AccordionGroup>

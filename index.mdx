@@ -1,97 +1,92 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Max"
+description: "A personal AI daemon built on the GitHub Copilot SDK — always-on, always available, controllable via Telegram or your terminal."
 ---
 
-## Setting up
-
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Max in seconds with a single curl command or npm.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get Max running and talk to it in under 5 minutes.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="Commands" icon="terminal" href="/commands/overview">
+    Full reference for all Max CLI commands and flags.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    Understand how Max orchestrates Copilot sessions.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What is Max?
 
-Everything you need to create world-class documentation.
+Max is a **personal AI daemon** for developers. It runs persistently on your machine, powered by the [GitHub Copilot SDK](https://github.com/github/copilot-sdk), and acts as an always-on orchestrator that you can reach from anywhere.
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+Send it a message from your phone via Telegram, or open a terminal and type. Max handles the rest — spinning up coding sessions in the right directories, remembering your preferences, and reporting back when work is done.
 
-## Need inspiration?
+```
+Telegram ──→ Max Daemon ←── TUI
+                │
+          Orchestrator Session (Copilot SDK)
+                │
+      ┌─────────┼─────────┐
+   Worker 1  Worker 2  Worker N
+  (coding sessions in specific directories)
+```
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="Persistent orchestrator" icon="brain">
+    One long-running Copilot session that survives restarts and recovers context automatically.
+  </Card>
+  <Card title="Multi-interface" icon="mobile">
+    Control Max from Telegram (remote) or the TUI (local terminal) — same brain, different inputs.
+  </Card>
+  <Card title="Worker sessions" icon="code-branch">
+    Max spawns child Copilot sessions in specific directories for focused coding tasks.
+  </Card>
+  <Card title="Skill system" icon="graduation-cap">
+    Install documentation-based skills to teach Max how to use external tools like Gmail or Calendar.
+  </Card>
+  <Card title="Long-term memory" icon="database">
+    Max remembers your preferences, projects, and routines in a local SQLite database.
+  </Card>
+  <Card title="Smart model routing" icon="route">
+    Max automatically selects the right model tier based on task complexity.
+  </Card>
+  <Card title="HTTP API" icon="plug">
+    A local REST API on port 7777 lets you integrate Max into your own tools and scripts.
+  </Card>
+  <Card title="MCP server support" icon="server">
+    Load MCP servers from your Copilot CLI config to extend Max's capabilities.
+  </Card>
+</CardGroup>
+
+## Example interactions
+
+Once Max is running, just send natural language from Telegram or the TUI:
+
+```
+"Start working on the auth bug in ~/dev/myapp"
+"What sessions are running?"
+"Check on the api-tests session"
+"Kill the auth-fix session"
+"Remember that I prefer TypeScript over JavaScript"
+"What's the capital of France?"
+```
+
+Max decides whether to answer directly, delegate to a worker session, or use a skill — no commands to memorize.
+
+## Everything stays local
+
+Max stores all configuration, memory, conversation history, and skills in `~/.max/` on your machine. No cloud sync, no data leaving your machine (except via Copilot SDK's normal API calls).
+
+<CardGroup cols={2}>
+  <Card title="Get started" icon="play" href="/quickstart">
+    Install and run Max in minutes
+  </Card>
+  <Card title="Read the architecture guide" icon="book" href="/concepts/architecture">
+    Understand how Max works under the hood
+  </Card>
+</CardGroup>

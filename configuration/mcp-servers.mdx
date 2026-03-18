@@ -1,0 +1,124 @@
+---
+title: MCP servers
+description: Extend Max with Model Context Protocol servers configured through the Copilot CLI.
+---
+
+Model Context Protocol (MCP) servers expose additional tools to AI sessions — for example, tools that query a database, interact with an external API, or read files from a custom source. Max inherits all MCP servers configured for your Copilot CLI without any Max-specific setup.
+
+## Config file location
+
+MCP servers are configured in the **Copilot CLI's** config file, not Max's:
+
+```
+~/.copilot/mcp-config.json
+```
+
+<Warning>
+  This is `~/.copilot/mcp-config.json`, not `~/.max/`. Max delegates all MCP management to the Copilot SDK — it does not maintain its own MCP config.
+</Warning>
+
+## Config format
+
+The file must contain a top-level `mcpServers` object. Each key is a server name and its value is the server definition accepted by the Copilot SDK's `MCPServerConfig` type.
+
+```json ~/.copilot/mcp-config.json
+{
+  "mcpServers": {
+    "my-database": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres"],
+      "env": {
+        "DATABASE_URL": "postgresql://localhost/mydb"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/projects"]
+    }
+  }
+}
+```
+
+If the file does not exist or is invalid JSON, Max starts normally with no MCP servers — it does not error.
+
+## How Max loads MCP servers
+
+At daemon startup, Max calls `loadMcpConfig()` before creating any Copilot sessions:
+
+```typescript src/copilot/mcp-config.ts
+export function loadMcpConfig(): Record<string, MCPServerConfig> {
+  const configPath = join(homedir(), ".copilot", "mcp-config.json");
+  try {
+    const raw = readFileSync(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (parsed.mcpServers && typeof parsed.mcpServers === "object") {
+      return parsed.mcpServers as Record<string, MCPServerConfig>;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+```
+
+The returned map is passed directly to the Copilot SDK when creating sessions:
+
+```typescript src/copilot/orchestrator.ts
+const mcpServers = loadMcpConfig();
+console.log(
+  `[max] Loading ${Object.keys(mcpServers).length} MCP server(s): ` +
+  Object.keys(mcpServers).join(", ")
+);
+
+const session = await client.createSession({
+  mcpServers,
+  skillDirectories,
+  // ...
+});
+```
+
+## What receives MCP servers
+
+Both the **orchestrator session** and every **worker session** receive the same MCP config. This means:
+
+- The orchestrator can call MCP tools directly when responding to your messages.
+- Worker sessions spawned for coding tasks also have access to the same MCP tools.
+- Tools exposed by MCP servers appear in the session's system message alongside built-in tools.
+
+## Applying changes
+
+MCP servers are loaded once at startup. To apply changes to `~/.copilot/mcp-config.json`:
+
+<Tabs>
+  <Tab title="TUI">
+    ```
+    /restart
+    ```
+  </Tab>
+  <Tab title="Terminal">
+    ```bash
+    max start
+    ```
+  </Tab>
+  <Tab title="Telegram">
+    Send `/restart` to your bot.
+  </Tab>
+</Tabs>
+
+<Note>
+  Max has no command to reload MCP servers without a full restart. Any change to `~/.copilot/mcp-config.json` requires restarting the daemon.
+</Note>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="MCP server not appearing as a tool">
+    1. Verify `~/.copilot/mcp-config.json` is valid JSON with a top-level `mcpServers` key.
+    2. Check daemon logs for the `[max] Loading N MCP server(s)` line — if N is 0, Max did not find any servers.
+    3. Restart the daemon after any config change.
+    4. Confirm the MCP server binary or package is installed and accessible in your `PATH`.
+  </Accordion>
+  <Accordion title="MCP server fails to start">
+    Max catches errors from `loadMcpConfig()` and returns an empty config rather than crashing. If a server fails to start at the Copilot SDK level, check that its `command` and `args` are correct by running the command manually in your terminal.
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,577 @@
+---
+title: HTTP API
+description: Complete reference for the Max local REST API running on port 7777.
+---
+
+Max exposes a local HTTP API that the TUI and any custom scripts can use to send messages, query state, and control the daemon. The API runs on `http://127.0.0.1:7777` by default.
+
+<Note>
+  The API binds to `127.0.0.1` only and is never exposed to the network. It is intended for local use by the TUI and scripts running on the same machine.
+</Note>
+
+## Base URL
+
+```
+http://127.0.0.1:7777
+```
+
+To use a different port, set `API_PORT` in `~/.max/.env` and restart the daemon.
+
+## Authentication
+
+All endpoints except `GET /status` require a Bearer token. The token is generated automatically on first run and stored at `~/.max/api-token` with mode `0600`.
+
+**Read the token:**
+
+```bash
+cat ~/.max/api-token
+```
+
+**Set it as an environment variable for use with curl:**
+
+```bash
+export MAX_TOKEN=$(cat ~/.max/api-token)
+```
+
+**Authorization header format:**
+
+```
+Authorization: Bearer <token>
+```
+
+Requests without a valid token receive a `401 Unauthorized` response:
+
+```json
+{ "error": "Unauthorized" }
+```
+
+---
+
+## Endpoints
+
+### GET /status
+
+Health check. Returns the daemon status and a snapshot of active workers. **No authentication required.**
+
+```bash
+curl http://127.0.0.1:7777/status
+```
+
+**Response**
+
+<ResponseField name="status" type="string" required>
+  Always `"ok"` when the daemon is running.
+</ResponseField>
+
+<ResponseField name="workers" type="object[]">
+  List of active worker sessions.
+  <Expandable title="worker properties">
+    <ResponseField name="name" type="string">
+      Unique name of the worker session.
+    </ResponseField>
+    <ResponseField name="workingDir" type="string">
+      Filesystem path the worker is operating in.
+    </ResponseField>
+    <ResponseField name="status" type="string">
+      Current status: `"idle"` or `"running"`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```json
+{
+  "status": "ok",
+  "workers": [
+    {
+      "name": "auth-fix",
+      "workingDir": "/home/user/dev/myapp",
+      "status": "running"
+    }
+  ]
+}
+```
+
+---
+
+### GET /stream
+
+Open a Server-Sent Events (SSE) connection to receive real-time streaming responses. You must obtain a `connectionId` from this endpoint before calling `POST /message`.
+
+```bash
+curl -N \
+  -H "Authorization: Bearer $MAX_TOKEN" \
+  http://127.0.0.1:7777/stream
+```
+
+The connection sends a heartbeat every 20 seconds (`:ping`) to keep it alive.
+
+**Initial event (on connect)**
+
+```
+data: {"type":"connected","connectionId":"tui-1"}
+```
+
+**Response field**
+
+<ResponseField name="connectionId" type="string">
+  Opaque identifier for this SSE connection. Pass this value as `connectionId` when calling `POST /message`.
+</ResponseField>
+
+**Event types received over the stream**
+
+| Type | Description |
+|------|-------------|
+| `connected` | Sent once on connect. Contains `connectionId`. |
+| `delta` | Partial streamed content. `content` is the full accumulated text so far. |
+| `message` | Final response. `content` is the complete text. May include a `route` field if auto-routing is enabled. |
+| `cancelled` | Sent when a message is cancelled via `POST /cancel`. |
+
+---
+
+### POST /message
+
+Send a message to the orchestrator. Requires an active SSE connection — responses stream back over `/stream`.
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $MAX_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "What sessions are running?", "connectionId": "tui-1"}' \
+  http://127.0.0.1:7777/message
+```
+
+**Request body**
+
+<ParamField body="prompt" type="string" required>
+  The message to send to the orchestrator.
+</ParamField>
+
+<ParamField body="connectionId" type="string" required>
+  The `connectionId` obtained from `GET /stream`. The response will be streamed back to that connection.
+</ParamField>
+
+**Response**
+
+<ResponseField name="status" type="string">
+  `"queued"` — the message has been accepted and will be processed. The actual response arrives over the SSE stream.
+</ResponseField>
+
+```json
+{ "status": "queued" }
+```
+
+<Warning>
+  If `connectionId` is missing or does not correspond to an active `/stream` connection, the request returns `400 Bad Request`.
+</Warning>
+
+---
+
+### GET /sessions
+
+List all active worker sessions with their current status and recent output.
+
+```bash
+curl -H "Authorization: Bearer $MAX_TOKEN" \
+  http://127.0.0.1:7777/sessions
+```
+
+**Response**
+
+An array of worker session objects.
+
+<ResponseField name="name" type="string">
+  Unique name of the worker session.
+</ResponseField>
+
+<ResponseField name="workingDir" type="string">
+  Filesystem path the worker is operating in.
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status: `"idle"` or `"running"`.
+</ResponseField>
+
+<ResponseField name="lastOutput" type="string">
+  Up to 500 characters of the most recent output from the worker.
+</ResponseField>
+
+```json
+[
+  {
+    "name": "auth-fix",
+    "workingDir": "/home/user/dev/myapp",
+    "status": "running",
+    "lastOutput": "Analyzing authentication flow..."
+  }
+]
+```
+
+---
+
+### GET /memory
+
+Retrieve all stored memories. Memories are long-term facts, preferences, and context that Max carries across conversations.
+
+```bash
+curl -H "Authorization: Bearer $MAX_TOKEN" \
+  http://127.0.0.1:7777/memory
+```
+
+Returns up to 100 memories across all categories.
+
+**Response**
+
+An array of memory objects.
+
+<ResponseField name="id" type="number">
+  Unique memory ID.
+</ResponseField>
+
+<ResponseField name="category" type="string">
+  Memory category: `"preference"`, `"fact"`, `"project"`, `"person"`, or `"routine"`.
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  The memory content.
+</ResponseField>
+
+```json
+[
+  { "id": 1, "category": "preference", "content": "Prefers TypeScript over JavaScript" },
+  { "id": 2, "category": "project",    "content": "Working on auth refactor in ~/dev/myapp" }
+]
+```
+
+---
+
+### GET /skills
+
+List all installed skills. Skills are loaded from three directories: the package bundled skills, `~/.max/skills/` (local), and `~/.agents/skills/` (global).
+
+```bash
+curl -H "Authorization: Bearer $MAX_TOKEN" \
+  http://127.0.0.1:7777/skills
+```
+
+**Response**
+
+An array of skill objects.
+
+<ResponseField name="slug" type="string">
+  URL-safe identifier for the skill. Used with `DELETE /skills/:slug`.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Human-readable skill name.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Short description of what the skill provides.
+</ResponseField>
+
+<ResponseField name="source" type="string">
+  Where the skill was loaded from: `"bundled"`, `"local"`, or `"global"`.
+</ResponseField>
+
+<ResponseField name="directory" type="string">
+  Filesystem path to the skill directory.
+</ResponseField>
+
+```json
+[
+  {
+    "slug": "gogcli",
+    "name": "Google (gogcli)",
+    "description": "Access Gmail, Calendar, Drive via gog CLI",
+    "source": "bundled",
+    "directory": "/usr/local/lib/node_modules/heymax/skills/gogcli"
+  },
+  {
+    "slug": "my-skill",
+    "name": "My Custom Skill",
+    "description": "A locally installed skill",
+    "source": "local",
+    "directory": "/home/user/.max/skills/my-skill"
+  }
+]
+```
+
+---
+
+### DELETE /skills/:slug
+
+Remove a locally installed skill. Only skills with `source: "local"` (installed in `~/.max/skills/`) can be removed. Bundled and global skills cannot be deleted via this endpoint.
+
+```bash
+curl -X DELETE \
+  -H "Authorization: Bearer $MAX_TOKEN" \
+  http://127.0.0.1:7777/skills/my-skill
+```
+
+**Path parameter**
+
+<ParamField path="slug" type="string" required>
+  The slug of the skill to remove. URL-encode slugs that contain special characters.
+</ParamField>
+
+**Success response**
+
+<ResponseField name="ok" type="boolean">
+  `true` on success.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Confirmation message.
+</ResponseField>
+
+```json
+{ "ok": true, "message": "Skill 'my-skill' removed" }
+```
+
+**Error response (400)**
+
+```json
+{ "error": "Skill 'my-skill' not found or cannot be removed" }
+```
+
+---
+
+### GET /model
+
+Get the currently active Copilot model.
+
+```bash
+curl -H "Authorization: Bearer $MAX_TOKEN" \
+  http://127.0.0.1:7777/model
+```
+
+**Response**
+
+<ResponseField name="model" type="string">
+  The model identifier currently in use (e.g. `"claude-sonnet-4.6"`).
+</ResponseField>
+
+```json
+{ "model": "claude-sonnet-4.6" }
+```
+
+---
+
+### POST /model
+
+Switch to a different Copilot model. The new model is validated against the list of models available from the Copilot CLI and persisted to `~/.max/.env`.
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $MAX_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gpt-4.1"}' \
+  http://127.0.0.1:7777/model
+```
+
+**Request body**
+
+<ParamField body="model" type="string" required>
+  The model identifier to switch to. Run `copilot listModels` to see available options.
+</ParamField>
+
+**Response**
+
+<ResponseField name="previous" type="string">
+  The model that was active before the switch.
+</ResponseField>
+
+<ResponseField name="current" type="string">
+  The newly active model.
+</ResponseField>
+
+```json
+{ "previous": "claude-sonnet-4.6", "current": "gpt-4.1" }
+```
+
+**Error response (400)**
+
+```json
+{ "error": "Model 'gpt-99' not found. Did you mean: gpt-4.1, gpt-5.1?" }
+```
+
+---
+
+### GET /auto
+
+Get the current auto model routing configuration and the last routing decision.
+
+```bash
+curl -H "Authorization: Bearer $MAX_TOKEN" \
+  http://127.0.0.1:7777/auto
+```
+
+**Response**
+
+<ResponseField name="enabled" type="boolean">
+  Whether auto-routing is currently active.
+</ResponseField>
+
+<ResponseField name="tierModels" type="object">
+  Map of tier names (`"fast"`, `"standard"`, `"premium"`) to model identifiers.
+</ResponseField>
+
+<ResponseField name="cooldownMessages" type="number">
+  Number of messages before the router re-classifies intent after a switch.
+</ResponseField>
+
+<ResponseField name="currentModel" type="string">
+  The model currently active.
+</ResponseField>
+
+<ResponseField name="lastRoute" type="object">
+  The most recent routing decision, or `null` if none has occurred.
+</ResponseField>
+
+```json
+{
+  "enabled": true,
+  "tierModels": {
+    "fast": "gpt-4.1-mini",
+    "standard": "claude-sonnet-4.6",
+    "premium": "claude-opus"
+  },
+  "cooldownMessages": 3,
+  "currentModel": "claude-sonnet-4.6",
+  "lastRoute": {
+    "model": "claude-sonnet-4.6",
+    "routerMode": "auto",
+    "tier": "standard"
+  }
+}
+```
+
+---
+
+### POST /auto
+
+Update the auto model routing configuration.
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $MAX_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}' \
+  http://127.0.0.1:7777/auto
+```
+
+**Request body**
+
+All fields are optional. Only provided fields are updated.
+
+<ParamField body="enabled" type="boolean">
+  Enable or disable auto model routing.
+</ParamField>
+
+<ParamField body="tierModels" type="object">
+  Map of tier names to model identifiers. Partial updates are merged.
+</ParamField>
+
+<ParamField body="cooldownMessages" type="number">
+  Number of messages before the router re-classifies after a model switch.
+</ParamField>
+
+**Response**
+
+The updated routing configuration object (same shape as `GET /auto`).
+
+```json
+{ "enabled": true, "tierModels": { ... }, "cooldownMessages": 3 }
+```
+
+---
+
+### POST /cancel
+
+Cancel the current in-flight message. A `cancelled` event is broadcast to all connected SSE clients.
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $MAX_TOKEN" \
+  http://127.0.0.1:7777/cancel
+```
+
+**Response**
+
+<ResponseField name="status" type="string">
+  `"ok"`
+</ResponseField>
+
+<ResponseField name="cancelled" type="boolean">
+  `true` if there was an active message to cancel, `false` if the orchestrator was idle.
+</ResponseField>
+
+```json
+{ "status": "ok", "cancelled": true }
+```
+
+---
+
+### POST /restart
+
+Restart the Max daemon. The current process spawns a replacement and exits. The API responds before the restart completes.
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $MAX_TOKEN" \
+  http://127.0.0.1:7777/restart
+```
+
+**Response**
+
+<ResponseField name="status" type="string">
+  `"restarting"`
+</ResponseField>
+
+```json
+{ "status": "restarting" }
+```
+
+<Note>
+  The orchestrator session ID is preserved across restarts. Max resumes its previous session automatically.
+</Note>
+
+---
+
+### POST /send-photo
+
+Send a photo to the configured Telegram user. Requires Telegram to be configured in `~/.max/.env`.
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $MAX_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"photo": "/tmp/screenshot.png", "caption": "Build output"}' \
+  http://127.0.0.1:7777/send-photo
+```
+
+**Request body**
+
+<ParamField body="photo" type="string" required>
+  Absolute filesystem path or URL to the image to send.
+</ParamField>
+
+<ParamField body="caption" type="string">
+  Optional caption text for the photo.
+</ParamField>
+
+**Response**
+
+<ResponseField name="status" type="string">
+  `"sent"` on success.
+</ResponseField>
+
+```json
+{ "status": "sent" }
+```
+
+**Error response (500)**
+
+```json
+{ "error": "Telegram bot not configured" }
+```

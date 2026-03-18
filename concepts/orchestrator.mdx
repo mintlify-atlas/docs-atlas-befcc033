@@ -1,0 +1,166 @@
+---
+title: Orchestrator
+description: The persistent Copilot SDK session at the heart of Max — how messages are queued, models are routed, and sessions survive restarts.
+---
+
+The orchestrator is Max's brain. It is a single, persistent Copilot SDK session that lives for the lifetime of the daemon. All messages — from Telegram, the TUI, or background worker completions — flow through it one at a time.
+
+## What It Is
+
+The orchestrator is a `CopilotSession` created via `client.createSession()` (or resumed via `client.resumeSession()`). Unlike workers, which are temporary, the orchestrator session is meant to live indefinitely. Its session ID is stored in the `max_state` SQLite table under the key `orchestrator_session_id` so it can be resumed after a daemon restart.
+
+```typescript
+// orchestrator.ts — session creation
+const session = await client.createSession({
+  model: config.copilotModel,
+  configDir: SESSIONS_DIR,          // ~/.max/sessions/
+  streaming: true,
+  systemMessage: { content: getOrchestratorSystemMessage(memorySummary) },
+  tools,
+  mcpServers,
+  skillDirectories,
+  onPermissionRequest: approveAll,
+  infiniteSessions: {
+    enabled: true,
+    backgroundCompactionThreshold: 0.80,
+    bufferExhaustionThreshold: 0.95,
+  },
+});
+
+// Persist session ID so it can be resumed on restart
+setState("orchestrator_session_id", session.sessionId);
+```
+
+## Session Persistence
+
+On every daemon start, Max attempts to resume the saved session:
+
+<Steps>
+  <Step title="Look up saved session ID">
+    `getState("orchestrator_session_id")` reads the ID from `max_state`. If none exists, skip to step 3.
+  </Step>
+  <Step title="Resume the session">
+    `client.resumeSession(savedId, { ... })` reconnects to the existing Copilot SDK session, preserving conversation history managed by the SDK.
+  </Step>
+  <Step title="Create a fresh session if resumption fails">
+    If resumption throws (session expired, invalid ID, etc.), the stale ID is deleted and a brand-new session is created. The last 10 conversation turns from `conversation_log` are then injected as a recovery context prompt so the model has recent history.
+  </Step>
+</Steps>
+
+<Note>
+  The SDK manages long-context conversation history automatically via `infiniteSessions`. Max sets a compaction threshold at 80% buffer utilization and a hard cutoff at 95%.
+</Note>
+
+## Message Queue
+
+The orchestrator is single-threaded by design. All inbound messages are pushed onto `messageQueue` and processed one at a time by `processQueue()`.
+
+```
+Message arrives from any source
+  ↓
+messageQueue.push({ prompt, callback, sourceChannel })
+  ↓
+processQueue()  ←  serialized: only one runs at a time
+  ├─ resolveModel()     — pick the right model
+  └─ executeOnSession() — run the turn, stream response
+```
+
+**Why serialized?** Concurrent writes to a single Copilot SDK session cause state corruption. The queue ensures that if three messages arrive while the orchestrator is busy, they are processed in order rather than racing.
+
+## Message Flow
+
+When `sendToOrchestrator(prompt, source, callback)` is called:
+
+1. **Source tagging** — user messages are prefixed with `[via telegram]` or `[via tui]`. Background worker completions are left untagged.
+2. **Enqueue** — the tagged prompt and callback are added to `messageQueue`.
+3. **Model resolution** — `resolveModel()` classifies the message and selects a model tier (see [Model Routing](#model-routing)).
+4. **Session execution** — `session.sendAndWait({ prompt }, 300_000)` runs with a 5-minute timeout. Streaming deltas are forwarded to the callback in real time.
+5. **Logging** — on success, both sides of the exchange are written to `conversation_log`.
+
+## Retry Logic
+
+Transient failures (timeouts, disconnects, EPIPE, etc.) are retried automatically:
+
+| Attempt | Delay before retry |
+|---------|-------------------|
+| 1st retry | 1 000 ms |
+| 2nd retry | 3 000 ms |
+| 3rd retry | 10 000 ms |
+
+Before each retry the SDK client is reset via `ensureClient()`. Non-recoverable errors (e.g. explicit cancellation) fail immediately without retrying.
+
+```typescript
+// orchestrator.ts — recoverable error patterns
+function isRecoverableError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /timeout|disconnect|connection|EPIPE|ECONNRESET|ECONNREFUSED|socket|closed|ENOENT|spawn|not found|expired|stale/i.test(msg);
+}
+```
+
+## Health Check Loop
+
+A `setInterval` fires every 30 seconds to verify the Copilot SDK client is still connected:
+
+```typescript
+// Every HEALTH_CHECK_INTERVAL_MS = 30_000 ms
+if (copilotClient.getState() !== "connected") {
+  await ensureClient();        // reset the connection
+  orchestratorSession = undefined;  // force session recreation on next message
+}
+```
+
+If the client is disconnected, it is reset. The orchestrator session is invalidated so that the next incoming message triggers a fresh `createOrResumeSession()` call.
+
+## System Message
+
+Each time a session is created or resumed, a system message is injected. It contains:
+
+- **Role & identity** — Max's name, personality, and the user's name
+- **Architecture overview** — how channels work (`[via telegram]`, `[via tui]`, `[via background]`)
+- **Tool usage guide** — when to use workers vs. answer directly, skill workflow, memory workflow
+- **Auto-routing tiers** — fast / standard / premium model assignments
+- **Long-term memory** — output of `getMemorySummary()`, grouped by category
+- **Self-edit protection** — injected unless `--self-edit` flag is set
+- **Current date** — resolved at session creation time via `process.platform`
+
+<Tip>
+  Memory is injected at session creation time, not on every message. If you save a new memory mid-conversation, it will appear in the system message the next time the session is recreated (e.g. after a model switch or restart).
+</Tip>
+
+## Model Routing
+
+Before each message is executed, `resolveModel()` selects a model:
+
+<AccordionGroup>
+  <Accordion title="Keyword overrides (highest priority)">
+    Certain keywords bypass classification entirely. The default override routes design/UI/UX requests to `claude-opus-4.6`:
+
+    ```
+    keywords: design, ui, ux, css, layout, styling, visual,
+              mockup, wireframe, frontend design, tailwind, responsive
+    ```
+  </Accordion>
+  <Accordion title="LLM classification">
+    When auto-routing is enabled and no override matches, the message is classified as `fast`, `standard`, or `premium` by a lightweight LLM call via `classifyWithLLM()`. The tier maps to a configured model:
+
+    | Tier | Default model |
+    |------|---------------|
+    | fast | `gpt-4.1` |
+    | standard | `claude-sonnet-4.6` |
+    | premium | `claude-opus-4.6` |
+  </Accordion>
+  <Accordion title="Cooldown">
+    To prevent rapid model switching, a cooldown of 2 messages is enforced. If the classifier wants to switch but the cooldown hasn't elapsed, the current model is kept.
+  </Accordion>
+  <Accordion title="Session recreation on switch">
+    When the model changes, the current orchestrator session is destroyed (`orchestratorSession = undefined`) and the session ID is deleted from `max_state`. The next `ensureOrchestratorSession()` call creates a fresh session on the new model.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  Auto-routing is **disabled by default**. Enable it with `toggle_auto` or via the `/model auto` TUI command. When disabled, the model configured in `~/.max/.env` is used for every message.
+</Note>
+
+## Tool Execution
+
+Tools run synchronously inside `session.sendAndWait()`. When the model calls a tool, the Copilot SDK invokes the registered handler, waits for it to return, then continues generating. Worker tools (`create_worker_session`, `send_to_worker`) are the exception — they dispatch work to a background thread and return immediately, keeping the orchestrator turn fast.

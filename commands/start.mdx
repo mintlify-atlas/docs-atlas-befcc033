@@ -1,0 +1,133 @@
+---
+title: max start
+description: Start the Max daemon — the persistent process that runs the Copilot orchestrator, HTTP API, and Telegram bot.
+---
+
+`max start` launches the Max daemon and keeps it running in the foreground. The daemon is the core of Max: it owns the Copilot SDK client, manages worker sessions, exposes an HTTP API on port 7777, and optionally runs a Telegram bot.
+
+```bash
+max start
+```
+
+## Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--self-edit` | off | Allow Max to modify his own source code. Sets `MAX_SELF_EDIT=1` in the process environment. |
+
+```bash
+# Start with self-edit enabled
+max start --self-edit
+```
+
+<Warning>
+`--self-edit` lets the orchestrator write to the Max source tree. Only use this if you are actively developing Max itself.
+</Warning>
+
+## What it does
+
+`max start` runs through the following boot sequence, logging each step to stdout:
+
+<Steps>
+  <Step title="Load config">
+    Reads `~/.max/.env` to populate runtime settings: `TELEGRAM_BOT_TOKEN`, `AUTHORIZED_USER_ID`, `API_PORT`, `COPILOT_MODEL`, and `WORKER_TIMEOUT`.
+  </Step>
+  <Step title="Initialize SQLite database">
+    Opens (or creates) `~/.max/max.db`. Stores worker sessions, conversation history, memories, and app state.
+  </Step>
+  <Step title="Start Copilot SDK client">
+    Connects to the GitHub Copilot SDK. The client must be authenticated — run `copilot login` beforehand if you haven't already.
+  </Step>
+  <Step title="Initialize orchestrator session">
+    Creates or resumes the persistent orchestrator Copilot session. Loads skills from `~/.max/skills/` and `~/.agents/skills/`, loads MCP servers from `~/.copilot/mcp-config.json`, and injects recent conversation context if recovering from a crash.
+  </Step>
+  <Step title="Start HTTP API">
+    Starts an Express server on port 7777 (or the `API_PORT` env var). The TUI and any external clients connect here.
+  </Step>
+  <Step title="Start Telegram bot">
+    If `TELEGRAM_BOT_TOKEN` and `AUTHORIZED_USER_ID` are configured, starts the Telegram bot. Messages are gated to the authorized user ID only.
+  </Step>
+  <Step title="Check for updates">
+    Runs a non-blocking check against the npm registry. If a newer version is found, a notice is printed to the terminal — it does not interrupt the daemon.
+  </Step>
+</Steps>
+
+## Expected terminal output
+
+A successful start looks like this:
+
+```text
+[max] Starting Max daemon...
+[max] Database initialized
+[max] Starting Copilot SDK client...
+[max] Copilot SDK client ready
+[max] Creating orchestrator session...
+[max] Orchestrator session ready
+[max] Max is fully operational.
+```
+
+If Telegram is not configured, you will see:
+
+```text
+[max] Telegram not configured — skipping bot. Run 'max setup' to configure.
+```
+
+Once running, every message flowing through the daemon is logged:
+
+```text
+[max] telegram  ⟶  Start working on the auth bug in ~/dev/myapp
+[max] telegram  ⟵  Sure, spinning up a worker session…
+```
+
+## Running in the foreground vs. background
+
+`max start` occupies the terminal. To keep it running while you work:
+
+<Tabs>
+  <Tab title="tmux / screen">
+    ```bash
+    # In a dedicated tmux pane
+    tmux new-session -d -s max 'max start'
+    ```
+  </Tab>
+  <Tab title="nohup">
+    ```bash
+    nohup max start > ~/.max/daemon.log 2>&1 &
+    ```
+  </Tab>
+  <Tab title="systemd (Linux)">
+    ```ini
+    [Unit]
+    Description=Max daemon
+
+    [Service]
+    ExecStart=/usr/local/bin/max start
+    Restart=on-failure
+
+    [Install]
+    WantedBy=default.target
+    ```
+  </Tab>
+</Tabs>
+
+## Stopping the daemon
+
+Press **Ctrl+C** (or send `SIGINT` / `SIGTERM`) to trigger a graceful shutdown.
+
+If there are active worker sessions, you will see a warning before shutdown proceeds:
+
+```text
+[max] ⚠ 2 active worker(s) will be destroyed: auth-fix, api-tests
+[max] Press Ctrl+C again to shut down, or wait for workers to finish.
+```
+
+Press **Ctrl+C a second time** to force immediate shutdown. The daemon always forces exit after 3 seconds to prevent hangs.
+
+```text
+[max] Shutting down... (Ctrl+C again to force)
+[max] Goodbye.
+```
+
+<Note>
+If the daemon is killed ungracefully (e.g. `kill -9`), the orchestrator session is preserved in SQLite and automatically resumed on the next `max start`.
+</Note>

@@ -1,0 +1,54 @@
+---
+title: Commands
+description: All CLI commands and flags available in Max.
+---
+
+Max is controlled entirely from the command line using the `max` binary. Every command follows the same pattern:
+
+```bash
+max <command> [flags]
+```
+
+## All commands
+
+| Command | Description |
+|---------|-------------|
+| `max start` | Start the Max daemon (Telegram bot + HTTP API + orchestrator) |
+| `max tui` | Connect to the running daemon via terminal UI |
+| `max setup` | Interactive first-run configuration wizard |
+| `max update` | Check for and install the latest version |
+| `max help` | Show help and available commands |
+
+## Flags
+
+| Flag | Applies to | Description |
+|------|------------|-------------|
+| `--self-edit` | `max start` | Allow Max to modify his own source code. Off by default. |
+| `--version`, `-v` | any position | Print the installed version number and exit. |
+| `--help`, `-h` | any position | Show the help message and exit. |
+
+```bash
+# Print the current version
+max --version
+
+# Show help
+max --help
+max help
+```
+
+## Command pages
+
+<CardGroup cols={2}>
+  <Card title="start" icon="play" href="/commands/start">
+    Start the daemon — boots the Copilot orchestrator, HTTP API, and Telegram bot.
+  </Card>
+  <Card title="tui" icon="terminal" href="/commands/tui">
+    Open the terminal UI and connect to a running daemon over SSE.
+  </Card>
+  <Card title="setup" icon="sliders" href="/commands/setup">
+    Interactive wizard to configure Telegram, Google services, and the default model.
+  </Card>
+  <Card title="update" icon="arrow-up-circle" href="/commands/update">
+    Check the npm registry for a newer version and install it automatically.
+  </Card>
+</CardGroup>

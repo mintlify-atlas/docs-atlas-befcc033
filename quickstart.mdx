@@ -1,80 +1,175 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get Max running and send your first message in under 5 minutes."
 ---
 
-## Get started in three steps
+<Steps>
+  <Step title="Install Max">
+    Run the curl installer to install Max and launch first-time setup automatically:
 
-Get your documentation site running locally and make your first customization.
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/burkeholland/max/main/install.sh | bash
+    ```
 
-### Step 1: Set up your local environment
+    Or install with npm directly (then run `max setup` manually):
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash
+    npm install -g heymax
+    ```
 
-### Step 2: Deploy your changes
+    <Note>
+      Node.js v18 or later is required. The installer checks this for you.
+    </Note>
+  </Step>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+  <Step title="Authenticate the Copilot CLI">
+    Max requires an authenticated Copilot CLI session. If you haven't done this yet:
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    ```bash
+    copilot login
+    ```
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    Follow the browser prompt to authorize. Once done, return to your terminal.
 
-### Step 3: Go live
+    <Warning>
+      Max will fail to start if the Copilot CLI is not authenticated. Run `copilot login` before `max start`.
+    </Warning>
+  </Step>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+  <Step title="Run max setup">
+    If you installed via npm (rather than the curl script), run setup now:
+
+    ```bash
+    max setup
+    ```
+
+    The interactive wizard will:
+    - Ask if you want to configure **Telegram** (optional — for remote access from your phone)
+    - Ask if you want to configure **Google services** via `gogcli` (optional)
+    - Let you pick a **default model** from your Copilot subscription
+    - Save your config to `~/.max/.env`
+
+    <Tip>
+      Telegram is entirely optional. You can use Max with just the terminal UI (`max tui`).
+    </Tip>
+  </Step>
+
+  <Step title="Start the daemon">
+    Start Max in your terminal:
+
+    ```bash
+    max start
+    ```
+
+    You should see output like:
+
+    ```
+    [max] Starting Max daemon...
+    [max] Database initialized
+    [max] Starting Copilot SDK client...
+    [max] Copilot SDK client ready
+    [max] Creating orchestrator session...
+    [max] Orchestrator session ready
+    [max] Max is fully operational.
+    ```
+
+    Leave this terminal running. The daemon runs in the foreground and logs all activity.
+
+    <Tip>
+      Use `max start --self-edit` to allow Max to modify its own source code. This is off by default.
+    </Tip>
+  </Step>
+
+  <Step title="Connect via the TUI">
+    Open a **second terminal** and connect to the running daemon:
+
+    ```bash
+    max tui
+    ```
+
+    The TUI connects to the local HTTP API (port 7777) and streams responses back in real time.
+  </Step>
+
+  <Step title="Send your first message">
+    You're now talking to Max. Try some of these:
+
+    ```
+    Start working on the auth bug in ~/dev/myapp
+    ```
+
+    ```
+    What sessions are running?
+    ```
+
+    ```
+    What's the capital of France?
+    ```
+
+    Max decides whether to answer directly, spawn a worker session in the right directory, or use an installed skill — no commands to memorize.
+  </Step>
+</Steps>
+
+## TUI slash commands
+
+Once you're in the TUI, you can use slash commands for quick actions:
+
+| Command | Description |
+|---------|-------------|
+| `/model [name]` | Show or switch the current model |
+| `/memory` | Show stored memories |
+| `/skills` | List installed skills |
+| `/workers` | List active worker sessions |
+| `/copy` | Copy last response to clipboard |
+| `/status` | Daemon health check |
+| `/restart` | Restart the daemon |
+| `/cancel` | Cancel the current in-flight message |
+| `/clear` | Clear the screen |
+| `/help` | Show help |
+| `/quit` | Exit the TUI |
+| `Escape` | Cancel a running response |
+
+## Example natural language interactions
+
+Max understands plain English. Here are some things you can say:
+
+<CodeGroup>
+
+```text Coding tasks
+Start working on the auth bug in ~/dev/myapp
+Check on the api-tests session
+Kill the auth-fix session
+```
+
+```text Session management
+What sessions are running?
+What's the status of my workers?
+```
+
+```text Skills and learning
+Find me a skill for checking Gmail
+Learn how to control my smart lights
+```
+
+```text Memory and preferences
+Remember that I prefer TypeScript over JavaScript
+Switch to gpt-4.1
+```
+
+</CodeGroup>
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Commands reference" icon="terminal" href="/commands/overview">
+    Full reference for all Max CLI commands and flags.
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/environment">
+    Customize your model, API port, and environment settings.
+  </Card>
+  <Card title="Telegram setup" icon="paper-plane" href="/guides/telegram-setup">
+    Set up remote access from your phone via Telegram.
+  </Card>
+  <Card title="Core concepts" icon="book" href="/concepts/architecture">
+    Understand how Max orchestrates Copilot sessions.
+  </Card>
 </CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>

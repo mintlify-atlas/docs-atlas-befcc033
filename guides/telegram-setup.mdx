@@ -1,0 +1,107 @@
+---
+title: Telegram setup
+description: Control Max from your phone by connecting a Telegram bot.
+---
+
+Telegram gives you a remote control for Max that works from anywhere. You can send tasks while away from your machine, dispatch background coding jobs, and receive notifications when workers finish — all from your phone.
+
+<Steps>
+  <Step title="Create a bot via @BotFather">
+    1. Open Telegram and search for **@BotFather**.
+    2. Send `/newbot` and follow the prompts (choose a name and username for your bot).
+    3. Copy the bot token BotFather gives you — it looks like `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`.
+  </Step>
+
+  <Step title="Get your Telegram user ID">
+    1. Search for **@userinfobot** on Telegram.
+    2. Send it any message.
+    3. It replies with your numeric user ID (for example, `123456789`).
+
+    <Note>
+      Max uses your user ID to lock the bot to you exclusively. Without it, anyone who discovers your bot's username could send it commands.
+    </Note>
+  </Step>
+
+  <Step title="Run max setup">
+    Run the interactive wizard and enter the token and user ID when prompted:
+
+    ```bash
+    max setup
+    ```
+
+    Alternatively, edit `~/.max/.env` directly:
+
+    ```bash
+    TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+    AUTHORIZED_USER_ID=123456789
+    ```
+  </Step>
+
+  <Step title="Disable group joins (recommended)">
+    Prevent your bot from being added to group chats:
+
+    1. Go back to **@BotFather**.
+    2. Send `/mybots` and select your bot.
+    3. Open **Bot Settings** → **Allow Groups?**
+    4. Set to **Disable**.
+
+    This is an extra layer of protection — even if someone adds your bot to a group, Max will silently ignore all messages from users whose ID does not match your `AUTHORIZED_USER_ID`.
+  </Step>
+
+  <Step title="Start Max and test">
+    Start the daemon:
+
+    ```bash
+    max start
+    ```
+
+    Open Telegram, find your bot, and send it a message. Max should reply within a few seconds. If you see the "typing..." indicator appear, the bot is connected.
+  </Step>
+</Steps>
+
+## Available bot commands
+
+| Command | What it does |
+|---|---|
+| `/cancel` | Cancel the current in-flight message |
+| `/model` | Show the current model |
+| `/model <name>` | Switch to a different model |
+| `/auto` | Toggle automatic model routing on or off |
+| `/memory` | List stored memories |
+| `/skills` | List installed skills |
+| `/workers` | List active worker sessions |
+| `/restart` | Restart the Max daemon |
+| `/help` | Show the full command list |
+
+## Security model
+
+Max's Telegram integration is locked to a single authorized user ID. The auth check happens at the grammy middleware layer — messages from any other Telegram user ID are silently dropped before they reach the orchestrator. There is no way to escalate access by adding the bot to a group or sending commands from a different account.
+
+The bot token and authorized user ID are stored in `~/.max/.env` on your local machine and are never sent anywhere beyond Telegram's API.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Bot doesn't respond at all">
+    - Confirm Max is running: `max tui` should connect successfully.
+    - Check that `TELEGRAM_BOT_TOKEN` and `AUTHORIZED_USER_ID` are set in `~/.max/.env`.
+    - Run `max setup` to re-enter the token if you're unsure it's correct.
+    - Make sure the user ID in `.env` matches the number @userinfobot returned for your account.
+  </Accordion>
+
+  <Accordion title="Error code 401 in logs">
+    The bot token is invalid or has been revoked. Go to @BotFather, generate a new token for your bot, and update `TELEGRAM_BOT_TOKEN` in `~/.max/.env` or re-run `max setup`.
+  </Accordion>
+
+  <Accordion title="Error code 409 in logs">
+    Another instance of Max is already running with the same token. Run `pkill -f 'max start'` to stop any stale processes, then start Max again.
+  </Accordion>
+
+  <Accordion title="Messages from Telegram are ignored">
+    The message is probably being dropped by the auth middleware. Confirm that the number in `AUTHORIZED_USER_ID` exactly matches the ID @userinfobot gave you — they must be identical. There is no partial match or fallback.
+  </Accordion>
+
+  <Accordion title="Long responses are cut off">
+    Telegram has a 4,096 character per-message limit. Max automatically chunks long responses into multiple messages, so a very long reply will arrive as a sequence of messages rather than one block.
+  </Accordion>
+</AccordionGroup>

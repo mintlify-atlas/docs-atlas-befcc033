@@ -1,0 +1,149 @@
+---
+title: Models
+description: Configure which AI model Max uses, how to switch models at runtime, and how automatic model routing works.
+---
+
+Max uses GitHub Copilot as its AI backend, which means any model available in your authenticated Copilot CLI can be used. The active model is set via `COPILOT_MODEL` in `~/.max/.env`.
+
+## Setting the default model
+
+<ParamField path="COPILOT_MODEL" type="string" default="claude-sonnet-4.6">
+  The model ID used by the orchestrator session. Must be available in your authenticated Copilot CLI.
+
+  To list all available models: `copilot listModels`
+</ParamField>
+
+The setup wizard presents available models fetched live from your Copilot CLI and writes your choice to `~/.max/.env`. If Copilot is not yet authenticated during setup, it falls back to a curated list.
+
+## Available models
+
+The following models are shown during `max setup` when Copilot is not yet authenticated:
+
+| Model ID | Name | Notes |
+|----------|------|---------|
+| `claude-sonnet-4.6` | Claude Sonnet 4.6 | Default — fast, great for most tasks |
+| `gpt-5.1` | GPT-5.1 | OpenAI's fast model |
+| `gpt-4.1` | GPT-4.1 | Free included model |
+
+<Note>
+  The actual list of available models depends on your Copilot subscription and which models are enabled for your account. Run `copilot listModels` to see what's available in your environment.
+</Note>
+
+## Switching models
+
+<Tabs>
+  <Tab title="TUI command">
+    In the terminal UI, use the `/model` command:
+
+    ```
+    /model gpt-4.1
+    ```
+
+    Or ask Max in plain English:
+
+    ```
+    Switch to gpt-4.1
+    ```
+
+    The change takes effect immediately and is persisted to `~/.max/.env`.
+  </Tab>
+  <Tab title="Edit ~/.max/.env">
+    Open the config file and update `COPILOT_MODEL`:
+
+    ```ini ~/.max/.env
+    COPILOT_MODEL=gpt-4.1
+    ```
+
+    Then restart the daemon:
+
+    ```bash
+    max start
+    ```
+  </Tab>
+  <Tab title="Telegram">
+    Send the `/model` command in your Telegram chat:
+
+    ```
+    /model claude-sonnet-4.6
+    ```
+  </Tab>
+</Tabs>
+
+## Model persistence
+
+Whenever you switch models at runtime, Max calls `persistModel()` to write the new value back to `~/.max/.env`:
+
+```typescript src/config.ts
+export function persistModel(model: string): void {
+  persistEnvVar("COPILOT_MODEL", model);
+}
+```
+
+This means your model choice survives daemon restarts — the next `max start` picks up whatever was last written to `~/.max/.env`.
+
+## Automatic model routing
+
+Max includes an optional model router that automatically selects the most appropriate model based on the complexity of each message. It is **disabled by default**.
+
+### How it works
+
+When enabled, every incoming message goes through a two-stage selection process:
+
+1. **Keyword overrides** — checked first, bypass the cooldown. Certain keywords force a specific model regardless of classification.
+2. **LLM classification** — the message is classified as `fast`, `standard`, or `premium` by GPT-4.1. Each tier maps to a configured model.
+
+A cooldown mechanism prevents rapid model switching between consecutive messages.
+
+### Tier-to-model defaults
+
+| Tier | Default model | Use case |
+|------|--------------|----------|
+| `fast` | `gpt-4.1` | Short answers, quick lookups |
+| `standard` | `claude-sonnet-4.6` | Most conversational tasks |
+| `premium` | `claude-opus-4.6` | Complex reasoning, design tasks |
+
+### Keyword overrides
+
+The router ships with one built-in override rule:
+
+| Rule name | Keywords | Model |
+|-----------|---------|-------|
+| `design` | design, ui, ux, css, layout, styling, visual, mockup, wireframe, frontend design, tailwind, responsive | `claude-opus-4.6` |
+
+Keyword matching uses word boundaries, so `"ui"` matches `"update the UI"` but not `"fruit"`.
+
+### Router configuration
+
+The router configuration is stored in the `max_state` SQLite table under the key `router_config` as a JSON blob:
+
+```json
+{
+  "enabled": false,
+  "tierModels": {
+    "fast": "gpt-4.1",
+    "standard": "claude-sonnet-4.6",
+    "premium": "claude-opus-4.6"
+  },
+  "overrides": [
+    {
+      "name": "design",
+      "keywords": ["design", "ui", "ux", "css", "layout", "styling", "visual",
+                   "mockup", "wireframe", "frontend design", "tailwind", "responsive"],
+      "model": "claude-opus-4.6"
+    }
+  ],
+  "cooldownMessages": 2
+}
+```
+
+The `cooldownMessages` field controls how many messages must pass before the router is allowed to switch models again, preventing thrashing.
+
+### Follow-up handling
+
+Short follow-up replies ("yes", "do it", "go ahead", "looks good", etc.) automatically inherit the tier from the previous turn rather than triggering a new classification.
+
+Background task completion messages always resolve to `standard` regardless of content.
+
+<Tip>
+  When auto-routing is off (the default), Max uses whichever model is set in `COPILOT_MODEL` for every message. Enable routing only if you want Max to use cheaper models for simple questions and reserve premium models for complex work.
+</Tip>
