@@ -78,19 +78,19 @@ To prevent rapid back-and-forth model switching, Max enforces a cooldown of 2 me
 ## Enabling and disabling routing
 
 <Tabs>
+  <Tab title="TUI">
+    ```
+    /auto
+    ```
+
+    Toggles routing on or off. When on, replies include a small indicator showing the model used: `⚡ auto · claude-sonnet-4.6`.
+  </Tab>
   <Tab title="Telegram">
     ```
     /auto
     ```
 
-    This toggles routing on or off. When on, replies include a small indicator showing the model used: `⚡ auto · claude-sonnet-4.6`.
-  </Tab>
-  <Tab title="TUI">
-    ```
-    /model
-    ```
-
-    View the current model. Routing state is reflected in the status line.
+    Same toggle as the TUI. The bot replies with `⚡ Auto mode on` or `Auto mode off · using <model>`.
   </Tab>
   <Tab title="Natural language">
     ```

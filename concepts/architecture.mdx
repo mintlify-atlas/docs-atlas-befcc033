@@ -38,7 +38,7 @@ Telegram Bot ──→ ┌─────────────────┐
     Temporary Copilot CLI sessions spawned on demand for coding tasks, file operations, and command execution. Up to 5 run concurrently; each is destroyed after completing its task.
   </Card>
   <Card title="HTTP API" icon="globe">
-    An Express server on port 7777. Exposes `POST /send`, `GET /events` (SSE), `/workers`, `/memories`, `/skills`, and more. Authentication via bearer token stored in `~/.max/api-token`.
+    An Express server on port 7777. Exposes `POST /message`, `GET /stream` (SSE), `GET /sessions`, `GET /memory`, `GET /skills`, and more. Authentication via bearer token stored in `~/.max/api-token`.
   </Card>
   <Card title="Telegram Bot" icon="paper-plane">
     Optional remote interface using the grammy library. Authenticated by a single authorized user ID — all other senders are silently ignored.
@@ -49,7 +49,7 @@ Telegram Bot ──→ ┌─────────────────┐
 
 <Steps>
   <Step title="Message arrives">
-    A message arrives from Telegram, the TUI (via `POST /send`), or a background worker completion. It is tagged with its source channel (`[via telegram]`, `[via tui]`, or left untagged for background).
+    A message arrives from Telegram, the TUI (via `POST /message`), or a background worker completion. It is tagged with its source channel (`[via telegram]`, `[via tui]`, or left untagged for background).
   </Step>
   <Step title="Enqueued">
     The tagged message is pushed onto the `messageQueue`. The queue is processed one entry at a time — if the orchestrator is busy, new messages wait rather than interleaving.

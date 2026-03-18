@@ -430,13 +430,13 @@ curl -H "Authorization: Bearer $MAX_TOKEN" \
 
 ```json
 {
-  "enabled": true,
+  "enabled": false,
   "tierModels": {
-    "fast": "gpt-4.1-mini",
+    "fast": "gpt-4.1",
     "standard": "claude-sonnet-4.6",
-    "premium": "claude-opus"
+    "premium": "claude-opus-4.6"
   },
-  "cooldownMessages": 3,
+  "cooldownMessages": 2,
   "currentModel": "claude-sonnet-4.6",
   "lastRoute": {
     "model": "claude-sonnet-4.6",
